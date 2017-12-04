@@ -1,0 +1,72 @@
+\documentclass[11pt]{article}
+\usepackage{a4wide,parskip,times}
+\usepackage{multicol}
+\PassOptionsToPackage{hyphens}{url}\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[margin=1.1in]{geometry}
+\pagenumbering{gobble}
+\titlespacing\subsubsection{0pt}{3pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+
+\begin{document}
+
+\centerline{\Large Automatic tree species identification from leaf images}
+\vspace{1em}
+\centerline{\Large \emph{Computer vision mini-project proposal}}
+\vspace{2em}
+\centerline{\large C. T. Hewitt (\emph{cth40}), Trinity Hall}
+\vspace{2em}
+
+\begin{multicols}{2}
+\small
+%Your personal starting point - what have you done in this area before?
+\subsubsection*{Starting Point}
+I have a reasonable theoretical grounding in both computer vision and machine learning having attended the Part I and II courses in these topics as a Cambridge undergraduate. My practical experience of both is limited to the exercises carried out as part of the Computer Vision, Affective Computing and Probabilistic Machine Learning courses this year.
+
+%General approach: will your mini-project focus on mathematical theory, novel algorithms or engineering applications?
+%What is the original research question or goal of your mini-project??
+\subsubsection*{Motivation}
+Identification of tree species can be very difficult for people not trained as agriculturalists due to the often very slight differences between the leaves of different tree species. For this reason an automated identification tool for untrained individuals is something that could be of great use. 
+
+Some work in this area has been carried out before, with a mobile app \emph{Leafsnap} created to provide this functionality \cite{leafsnap}. Their classification method is a simple nearest neighbour approach which produces reasonable results, though I feel there is significant room for improvement in this domain through the use of more current machine learning approaches. The creators of \emph{Leafsnap} also provide little in the way of a thorough evaluation of their work, something I hope to include in my project. Ideally my classification system, if suitably accurate, would be wrapped into a mobile or web app for the public to use in a similar manner to \emph{Leafsnap}.
+
+%Summarise the technique you plan to use, or theory you plan to apply, with reference / citations.
+\subsubsection*{Approach}
+There is potential for use of deep learning approaches here, bypassing the need for feature set design, though I expect that this will not be possible given constraints on computational resources. Instead, I intend to focus my efforts in a similar direction to those of \emph{Leafsnap} and make use of a bespoke feature set.
+
+Using a dataset comprised of leaf images, I intend to devise a new feature set, augmenting the curvature maps used in \emph{Leafsnap}, perhaps utilising features based on characteristics such as colour or texture. The leaves will then be classified from the extracted features using a shallow machine learning approach. I intend to investigate a number of techniques in order to maximise performance, though SVMs are perhaps the most conventional choice for the task. 
+
+%Explain what materials you need access to, such as data sets, cameras, specialised libraries etc
+%Estimate the computational resources you will need for the project, including memory, disk, CPU hours
+\subsubsection*{Resources}
+The dataset used for training of \emph{Leafsnap} is publicly available and consists of 23147 lab images (high-quality images taken of pressed leaves in controlled conditions) and 7719 field images (``typical'' images taken by mobile devices in outdoor environments) labelled for the 185 tree species present in the Northern United States. The dataset also contains segmentation images, though I don't intend to make use of these. This dataset should certainly be suitable for any techniques I make use of as part of this project. A further dataset used to train the system for tree species in the UK is not available publicly, but may be upon request.
+
+For such a large dataset feature extraction will still take a fair amount of computation, as will training of the classification and evaluation. I can instead operate on a subset to gain an indication of performance and evaluate on a larger subset or the full dataset if feasible. Once the model is trained, feature extraction and classification for a single image should be able to occur on a mobile device, so this should constrain the complexity of each process to a reasonable level.
+
+Implementations of common machine learning techniques are readily available as open source libraries (e.g. WEKA \cite{weka}, LibSVM \cite{libsvm}), I intend to make use of this sort of library to classify leaf images based on my extracted feature set.
+
+{
+\subsubsection*{References}
+\def\section*#1{}
+\begin{thebibliography}{9}
+\scriptsize
+\bibitem{leafsnap}
+\emph{Leafsnap: A Computer Vision System for Automatic Plant Species Identification}.
+Neeraj Kumar, Peter N. Belhumeur, Arijit Biswas, David W. Jacobs, W. John Kress, Ida C. Lopez, João V. B. Soares.
+Proceedings of the 12th European Conference on Computer Vision (ECCV).
+October 2012.
+\bibitem{weka}
+The WEKA Workbench. Online Appendix for "Data Mining: Practical Machine Learning Tools and Techniques"
+Eibe Frank, Mark A. Hall, and Ian H. Witten.
+University of Waikato, 2016.\\
+\url{https://www.cs.waikato.ac.nz/ml/weka/}
+\bibitem{libsvm}
+LibSVM, C. Chang and C. Lin.\\
+\url{https://www.csie.ntu.edu.tw/~cjlin/libsvm/}
+\end{thebibliography}
+}
+
+\end{multicols}
+
+\end{document}
+
