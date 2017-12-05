@@ -11,15 +11,15 @@ B_Y_THRESH = 0.3
 B_X_THRESH = 0.1
 W_THRESH = 0.5
 K_SIZE = 10
+OUT_SIZE = 512
 
-
-def cut_edges(show=False):
-    for species_path in sorted(glob.glob('dataset/images/lab/*')):
+def cut_edges(env, show=False):
+    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
         if not os.path.exists(species_path):
             os.makedirs(species_path)
         for image_path in sorted(glob.glob(species_path + '/*')):
             print(image_path)
-            new_path = 'dataset/images/lab_p/' + '/'.join(image_path.split('/')[3:])
+            new_path = 'dataset/images/'+env+'_p/' + '/'.join(image_path.split('/')[3:])
             image = cv2.imread(image_path)
             h, w = image.shape[:2]
             grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -82,20 +82,31 @@ def print_count(t):
     print('Total: '.ljust(35), str(count).rjust(9))
 
 
-def resize(show=False):
-    for species_path in sorted(glob.glob('dataset/images/field/*')):
-        new_path = 'dataset/images/field_r/' + '/'.join(species_path.split('/')[3:])
+def resize(env, show=False):
+    count = 0
+    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
+        new_path = 'dataset/images/'+env+'_r/' + '/'.join(species_path.split('/')[3:])
         if not os.path.exists(new_path):
             os.makedirs(new_path)
         for image_path in sorted(glob.glob(species_path + '/*')):
+            count += 1
+            print('Processed: ', count, end="\r")
             new_img_path = new_path + '/' + image_path.split('/')[-1]
             image = cv2.imread(image_path)
             h, w = image.shape[:2]
             sqs = max(h, w)
             hd = (sqs - h) / 2
             wd = (sqs - w) / 2
-            squared = cv2.copyMakeBorder(image, top=floor(hd), bottom=ceil(hd), left=floor(wd), right=ceil(wd), borderType=cv2.BORDER_REPLICATE)
-            resized = cv2.resize(squared, (512, 512))
+            if wd != 0:
+                a = np.mean(image[:,0],axis=0)
+                b = np.mean(image[:,w-1],axis=0)
+            else:
+                a = np.mean(image[0,:],axis=0)
+                b = np.mean(image[h-1,:],axis=0)
+            edge_colour = (a + b) / 2
+            squared = cv2.copyMakeBorder(image, top=floor(hd), bottom=ceil(hd), left=floor(wd),
+                right=ceil(wd), borderType=cv2.BORDER_CONSTANT, value=edge_colour)
+            resized = cv2.resize(squared, (OUT_SIZE, OUT_SIZE))
             if show:
                 cv2.destroyAllWindows()
                 cv2.imshow(image_path, resized)
@@ -103,5 +114,3 @@ def resize(show=False):
                 break
             else:
                 cv2.imwrite(new_img_path, resized)
-
-cv2.destroyAllWindows()
