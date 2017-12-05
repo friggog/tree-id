@@ -104,8 +104,4 @@ def resize(show=False):
             else:
                 cv2.imwrite(new_img_path, resized)
 
-# print_count('field')
-# print_count('lab_p')
-resize()
-
 cv2.destroyAllWindows()
