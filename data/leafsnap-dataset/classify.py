@@ -4,9 +4,18 @@ import numpy as np
 
 from sklearn.model_selection import cross_validate
 from sklearn.svm import SVC
+from sklearn.exceptions import UndefinedMetricWarning
 
 from extract import extract
 from preprocess import resize
+
+import warnings
+warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+
+def normalized(a, axis=-1, order=2):
+    l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
+    l2[l2==0] = 1
+    return a / np.expand_dims(l2, axis)
 
 def load_features(env, limit=-1, start=0):
     featureset = []
@@ -17,14 +26,15 @@ def load_features(env, limit=-1, start=0):
             if i < start:
                 continue
             features = np.load(f_path)
-            if features is not None and len(features) != 0:
-                featureset.append(features)
-                labelset.append(species)
-            if (limit > 0 and i > limit):
+            if features is not None:
+                if len(features) != 0:
+                    featureset.append(features)
+                    labelset.append(species)
+            if (limit > 0 and i >= limit):
                 break
     return featureset, labelset
 
-def classify(mode=0):
+def classify(env, mode=0, limit=-1):
     print('CLASSIFYING')
     # X_train, X_test, y_train, y_test = train_test_split(featureset, labelset, test_size=0.2, random_state=0)
     #
@@ -64,8 +74,8 @@ def classify(mode=0):
     #     print()
 
     if mode == 0:
-        featureset, labelset = load_features('field_r')
-        clf = SVC(kernel='linear', C=1000, class_weight='balanced')
+        featureset, labelset = load_features(env, limit=limit)
+        clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced')
         scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
         print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
         # k = 10
@@ -84,7 +94,7 @@ def classify(mode=0):
         # # TO SAVE
         # print('Completed with average recall: ', np.mean(fold_a))
     elif mode == 1:
-        clf = SVC(kernel='linear', C=1000, class_weight='balanced')
+        clf = SVC(kernel='rbf', C=1000, class_weight='balanced')
         train_fs, train_ls = load_features('lab_r')
         train_fs2, train_ls2 = load_features('field_r', start=3)
         train_fs.extend(train_fs2)
@@ -97,6 +107,7 @@ def classify(mode=0):
         acc = np.mean(correct)
         print('Completed recall: ', acc)
 
-resize('field')
-extract('field_r')
-classify(mode=0)
+# resize('field')
+print('SETUP 1')
+extract('field', limit=7, setup=(16, 10, 40, 5))
+classify('field', limit=7)

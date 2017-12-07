@@ -1,6 +1,6 @@
 import glob
 import os
-from math import ceil, floor
+from math import ceil, floor, sqrt
 
 import cv2
 import numpy as np
@@ -114,3 +114,52 @@ def resize(env, show=False):
                 break
             else:
                 cv2.imwrite(new_img_path, resized)
+
+def isolate_leaf(path):
+    image = cv2.imread(path)
+    h, w = image.shape[:2]
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(grey, np.median(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    _, sat, vib = cv2.split(hsv)
+    _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
+    if np.mean(sat) < 200:
+        thresh = np.add(sat, thresh)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if a < 300 or l < 300:
+            continue
+        M = cv2.moments(cnt)
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
+        dc = sqrt(pow(abs(256 - cx), 2) + pow(abs(256 - cy), 2))
+        if a > curr[1] and dc < (h * w / 1500):
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        return None
+    segment = np.zeros((h,w))
+    cv2.drawContours(segment, [curr[0]], -1, color=(255,255,255), thickness=-1)
+    return segment
+
+def segment(env, show=False):
+    count = 0
+    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
+        new_path = 'dataset/segmentations/'+env+'/'+'/'.join(species_path.split('/')[3:])
+        if not os.path.exists(new_path):
+            os.makedirs(new_path)
+        for image_path in sorted(glob.glob(species_path + '/*')):
+            count += 1
+            print('Processed: ', count, end="\r")
+            new_img_path = new_path + '/' + image_path.split('/')[-1]
+            segmentation = isolate_leaf(image_path)
+            if segmentation is None or np.mean(segmentation) > 130:
+                continue
+            if show:
+                cv2.destroyAllWindows()
+                cv2.imshow(image_path, segmentation)
+                cv2.waitKey(0)
+                break
+            cv2.imwrite(new_img_path, segmentation)
