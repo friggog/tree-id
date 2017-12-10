@@ -139,10 +139,47 @@ def isolate_leaf(path):
         if a > curr[1] and dc < (h * w / 1500):
             curr = (cnt, a, l)
     if curr[0] is None:
-        return None
-    segment = np.zeros((h,w))
+        return None, None
+    segment = np.zeros((h,w), np.uint8)
     cv2.drawContours(segment, [curr[0]], -1, color=(255,255,255), thickness=-1)
-    return segment
+    return segment, curr[0]
+
+def get_curvature_map(line, segment, scale=25):
+    curv = []
+    r = scale
+    ha = np.pi * pow(r,2) / 2
+    for i in range(0, len(line), max(int(len(line)/100),1)):
+        mask = np.zeros(segment.shape[:2], np.uint8)
+        c = line[i][0]
+        cv2.circle(mask, (int(c[0]),int(c[1])), r, (255,255,255), -1)
+        res = cv2.bitwise_and(mask, segment)
+        o = (np.sum(res/255) - ha) / ha
+        curv.append(o)
+    return curv
+
+def get_curvature(env, show=False):
+    count = 0
+    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
+        new_path = 'dataset/curvatures/'+env+'/'+'/'.join(species_path.split('/')[3:])
+        if not os.path.exists(new_path):
+            os.makedirs(new_path)
+        for image_path in sorted(glob.glob(species_path + '/*')):
+            count += 1
+            print('Processed: ', count, end="\r")
+            new_img_path = new_path + '/' + image_path.split('/')[-1]
+            segmentation, contour = isolate_leaf(image_path)
+            if segmentation is None or contour is None:
+                continue
+            maps = []
+            for h in range(1,150,25):
+                maps.append(get_curvature_map(contour, segmentation, h))
+            out = (np.array(maps)+1)/2
+            if show:
+                cv2.destroyAllWindows()
+                cv2.imshow(image_path, out)
+                cv2.waitKey(0)
+                break
+            cv2.imwrite(new_img_path, out)
 
 def segment(env, show=False):
     count = 0
@@ -154,7 +191,7 @@ def segment(env, show=False):
             count += 1
             print('Processed: ', count, end="\r")
             new_img_path = new_path + '/' + image_path.split('/')[-1]
-            segmentation = isolate_leaf(image_path)
+            segmentation, _ = isolate_leaf(image_path)
             if segmentation is None or np.mean(segmentation) > 130:
                 continue
             if show:

@@ -1,9 +1,12 @@
 import glob
+import subprocess
 
 import numpy as np
+import time
 
 from sklearn.model_selection import cross_validate
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.exceptions import UndefinedMetricWarning
 
 from extract import extract
@@ -12,10 +15,6 @@ from preprocess import resize
 import warnings
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
-def normalized(a, axis=-1, order=2):
-    l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
-    l2[l2==0] = 1
-    return a / np.expand_dims(l2, axis)
 
 def load_features(env, limit=-1, start=0):
     featureset = []
@@ -75,7 +74,13 @@ def classify(env, mode=0, limit=-1):
 
     if mode == 0:
         featureset, labelset = load_features(env, limit=limit)
+        print('SVM')
         clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced')
+        scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
+        print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
+
+        print('LinSVM')
+        clf = LinearSVC(C=1000, class_weight='balanced')
         scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
         print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
         # k = 10
@@ -107,7 +112,26 @@ def classify(env, mode=0, limit=-1):
         acc = np.mean(correct)
         print('Completed recall: ', acc)
 
-# resize('field')
-print('SETUP 1')
-extract('field', limit=7, setup=(16, 10, 40, 5))
-classify('field', limit=7)
+p1 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '1'])
+p3 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '2'])
+p4 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '3'])
+
+p1.wait()
+p2.wait()
+p3.wait()
+p4.wait()
+
+classify('field')
+
+# p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '0'])
+# p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '1'])
+# p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '2'])
+# p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '3'])
+#
+# p1.wait()
+# p2.wait()
+# p3.wait()
+# p4.wait()
+#
+# classify('lab')
