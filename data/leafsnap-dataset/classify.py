@@ -79,10 +79,6 @@ def classify(env, mode=0, limit=-1):
         scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
         print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
 
-        print('LinSVM')
-        clf = LinearSVC(C=1000, class_weight='balanced')
-        scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
-        print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
         # k = 10
         # fold_a = []
         # for i in range(k):
