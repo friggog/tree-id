@@ -4,115 +4,178 @@ from math import sqrt, floor
 import cv2
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
+import matplotlib.pyplot as plt
 
+MAP_LENGTH = 128
+MAP_SCALE = 20
 
-def get_cm(line, segment, scale=25, method=0):
+def get_curvature_map(line, segment):
     curv = []
-    if method == 0:
-        l = 75
-        r = scale
-        ha = np.pi * pow(r, 2) / 2
-        for i in range(0, len(line), max(floor(len(line) / l), 1)):
-            mask = np.zeros(segment.shape[:2], np.uint8)
-            c = line[i][0]
-            cv2.circle(mask, (int(c[0]), int(c[1])), r, (255, 255, 255), -1)
-            res = cv2.bitwise_and(mask, segment)
-            o = (np.sum(res / 255) - ha) / ha
-            curv.append(o)
-        if len(curv) < l:
-            for i in range(l - len(curv)):
-                curv.append(0)
-        else:
-            curv = curv[:75]
+    l = MAP_LENGTH
+    r = MAP_SCALE
+    ha = np.pi * pow(r, 2) / 2
+    for i in range(0, len(line), max(floor(len(line) / l), 1)):
+        mask = np.zeros(segment.shape[:2], np.uint8)
+        c = line[i][0]
+        cv2.circle(mask, (int(c[0]), int(c[1])), r, (255, 255, 255), -1)
+        res = cv2.bitwise_and(mask, segment)
+        o = (np.sum(res / 255) - ha) / ha
+        curv.append(o)
+    if len(curv) < l:
+        for i in range(l - len(curv)):
+            curv.append(0) # TODO
     else:
-        for i in range(len(line)):
-            if i - h < - len(line) + 1:
-                m = line[i - h + len(line)][0]
-            else:
-                m = line[i - h][0]
-            c = line[i][0]
-            if i > len(line) - h - 1:
-                p = line[i + h - len(line)][0]
-            else:
-                p = line[i + h][0]
-            f = (p - c) / pow(h, 2)
-            ff = (p - 2 * c + m) / pow(h, 2)
-            k = (f[0] * ff[1] - f[1] * ff[0]) / pow(pow(f[0], 2) + pow(f[1], 2), 1.5)
-            curv.append(k)
-        curv = np.nan_to_num(curv)
-        curv = np.clip(curv, -200, 200)
+        curv = curv[:l]
     return curv
 
 
 def isolate_leaf(image):
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(grey, np.median(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
+    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, vib = cv2.split(hsv)
     _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
     if np.mean(sat) < 200:
         thresh = np.add(sat, thresh)
+    # thresh = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, np.ones((3,3), np.uint8)))
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = (None, 0, 0)
     for cnt in contours:
         a = cv2.contourArea(cnt)
+        if a < (h * w) * 0.01:
+            continue
         l = cv2.arcLength(cnt, False)
-        if a < 300 or l < 300:
+        if l < max(w,h) * 0.05:
             continue
         M = cv2.moments(cnt)
         cx = int(M['m10'] / M['m00'])
         cy = int(M['m01'] / M['m00'])
-        dc = sqrt(pow(abs(256 - cx), 2) + pow(abs(256 - cy), 2))
-        if a > curr[1] and dc < (h * w / 1500):
+        dc = sqrt(pow(abs(w/2 - cx), 2) + pow(abs(h/2 - cy), 2))
+        if dc < (h * w / 750):
             curr = (cnt, a, l)
     if curr[0] is None:
-        return None, None, None, None
-    return grey, curr[0], curr[1], curr[2]
+        return None, None, None, None, None
+    segment = np.zeros((h,w), np.uint8)
+    cv2.drawContours(image, [curr[0]], -1, color=(255,0,255))
+    cv2.drawContours(segment, [curr[0]], -1, color=(255,255,255), thickness=-1)
+    return grey, curr[0], curr[1], curr[2], segment
 
 
 def get_cm_from_path(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
-    grey, contour, area, length = isolate_leaf(image)
-    s_path = 'dataset/segmentations/' + '/'.join(path.split('/')[2:])
-    segmentation = cv2.imread(s_path, 0)
+    grey, contour, area, length, segmentation = isolate_leaf(image)
     if contour is None or segmentation is None:
         return []
-    return get_cm(contour, segmentation)
+    # cv2.imshow('2',segmentation)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    return get_curvature_map(contour, segmentation)
+
+def get_cm_offset(average_map, new_map):
+    max_c = (0, 0, 0)
+    for i in range(len(average_map)):
+        r = np.roll(new_map, i)
+        c = np.correlate(average_map, r)
+        mse = ((average_map - r) ** 2).mean()
+        if c > max_c[0] and mse < 0.1:
+            max_c = (c, i, mse)
+    # plt.plot(average_map)
+    # plt.plot(np.roll(new_map, max_c[1]))
+    # plt.show()
+    # print(max_c[0], max_c[2])
+    if max_c[2] != 0:
+        return np.roll(new_map, max_c[1])
+    else:
+        return None
 
 
-def do(env, limit=-1):
-    count = 0
-    maps = []
-    labels = []
-    for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
-        species = species_path.split('/')[-1]
-        for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
-            cm = get_cm_from_path(image_path)
-            if len(cm) != 0:
-                maps.append(cm)
-                labels.append(species)
-            count += 1
-            print('Done:', count, end="\r")
-            if limit > 0 and i >= limit - 1:
-                break
-    clf = KNeighborsClassifier()
-    scores = cross_validate(clf, maps, labels, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
-    print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
-    # k = 10
-    # fold_a = []
-    # for i in range(k):
-    #     train_f = [item for index, item in enumerate(maps) if (index - i) % k != 0]
-    #     train_l = [item for index, item in enumerate(labels) if (index - i) % k != 0]
-    #     clf.fit(train_f, train_l)
-    #     test_f = maps[i::10]
-    #     test_l = labels[i::10]
-    #     predicted = clf.predict(test_f)
-    #     correct = predicted == test_l
-    #     acc = np.mean(correct)
-    #     print('Fold', i + 1, 'complete with recall:', acc)
-    #     fold_a.append(acc)
-    # print('Completed with average recall: ', np.mean(fold_a))
+# def get_ave_maps(env, limit=-1):
+#     count = 0
+#     maps = []
+#     labels = []
+#     for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
+#         species = species_path.split('/')[-1]
+#         average_map = None
+#         for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+#             if i < 1:
+#                 continue # TEMP for testing
+#             cm = get_cm_from_path(image_path)
+#             if len(cm) != 0:
+#                 if average_map is None:
+#                     average_map = cm
+#                 else:
+#                     nm = get_cm_offset(average_map, cm)
+#                     if nm is not None:
+#                         average_map = (average_map + nm)/2
+#             count += 1
+#             print('Done:', count, end="\r")
+#             if limit > 0 and i >= limit - 1:
+#                 break
+#         maps.append(average_map)
+#         labels.append(species)
+#     return maps, labels
+#
+# def predict_from_cm(curvature_map, maps, labels):
+#     max_c = (0, 0, 0, 0)
+#     for i, ex_map in enumerate(maps):
+#         if ex_map is None:
+#             continue
+#         for j in range(len(ex_map)):
+#             r = np.roll(curvature_map, j)
+#             c = np.correlate(ex_map, r)
+#             mse = ((ex_map - r) ** 2).mean()
+#             if c > max_c[0] and mse < 0.1:
+#                 max_c = (c, i, j, mse)
+#     return labels[max_c[1]]
+#
+#
+# c_maps, c_labels = get_ave_maps('field', 3)
+# correct = 0
+# total = 0
+# for species_path in sorted(glob.glob('dataset/images/' + 'field' + '/*')):
+#     species = species_path.split('/')[-1]
+#     for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+#         if i < 1:
+#             cm = get_cm_from_path(image_path)
+#             predicted = predict_from_cm(cm, c_maps, c_labels)
+#             correct += predicted == species
+#             total += 1
+#             print(species, predicted)
+# print(correct/total)
 
-do('field', limit=15)
+
+
+# def get_shifted_maps(env, limit=-1):
+#     count = 0
+#     maps = []
+#     labels = []
+#     for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
+#         species = species_path.split('/')[-1]
+#         average_map = None
+#         for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+#             cm = get_cm_from_path(image_path)
+#             if len(cm) != 0:
+#                 if average_map is None:
+#                     average_map = cm
+#                     maps.append(cm)
+#                     labels.append(species)
+#                 else:
+#                     nm = get_cm_offset(average_map, cm)
+#                     if nm is not None:
+#                         maps.append(nm)
+#                         labels.append(species)
+#                         average_map = (average_map + nm)/2
+#                     else:
+#                         print('UHOH')
+#             count += 1
+#             print('Done:', count, end="\r")
+#             if limit > 0 and i >= limit - 1:
+#                 break
+#     return maps, labels
+#
+# maps, labels = get_shifted_maps('field', limit=15)
+# clf = KNeighborsClassifier()
+# scores = cross_validate(clf, maps, labels, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
+# print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))

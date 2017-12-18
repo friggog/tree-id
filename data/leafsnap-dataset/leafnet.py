@@ -2,6 +2,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.layers import Conv2D, MaxPooling2D, Activation, Dropout, Flatten, Dense, GlobalMaxPool1D
 from keras.utils import plot_model
+from keras import optimizers
 import numpy
 import pydot
 
@@ -60,15 +61,16 @@ model.add(Dense(2048, activation='relu'))
 model.add(Dropout(0.4))
 model.add(Dense(184, activation='softmax'))
 
+sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
 model.compile(loss='categorical_crossentropy',
-              optimizer='adam',
+              optimizer=sgd,
               metrics=['accuracy'])
 
 model.fit_generator(
         generator,
-        steps_per_epoch=2000 // batch_size,
-        epochs=50,
+        steps_per_epoch=2048 // batch_size,
+        epochs=64,
         validation_data=validator,
-        validation_steps=800 // batch_size)
+        validation_steps=512 // batch_size)
 
 model.save_weights('leaf_net.h5')

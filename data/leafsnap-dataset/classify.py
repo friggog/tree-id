@@ -8,6 +8,7 @@ from sklearn.model_selection import cross_validate
 from sklearn.svm import SVC, LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.exceptions import UndefinedMetricWarning
+from sklearn import decomposition
 
 from extract import extract
 from preprocess import resize
@@ -33,8 +34,18 @@ def load_features(env, limit=-1, start=0):
                 break
     return featureset, labelset
 
+
+
+def classify_svm(featureset,labelset,C,gamma):
+    clf = SVC(kernel='rbf', C=C, gamma=gamma, class_weight='balanced')
+    scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
+    print('Precision:'.ljust(20), np.mean(scores['test_precision_macro']))
+    print('Recall'.ljust(20), np.mean(scores['test_recall_macro']))
+    print('F1'.ljust(20), np.mean(scores['test_f1_macro']))
+
+
 def classify(env, mode=0, limit=-1):
-    print('CLASSIFYING')
+    print('** CLASSIFYING **')
     # X_train, X_test, y_train, y_test = train_test_split(featureset, labelset, test_size=0.2, random_state=0)
     #
     # tuned_parameters = [{'kernel': ['rbf'], 'gamma': [1e-3, 1e-4],
@@ -74,10 +85,13 @@ def classify(env, mode=0, limit=-1):
 
     if mode == 0:
         featureset, labelset = load_features(env, limit=limit)
-        print('SVM')
-        clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced')
-        scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
-        print('Precision:', np.mean(scores['test_precision_macro']), 'Recall', np.mean(scores['test_recall_macro']), 'F1', np.mean(scores['test_f1_macro']))
+        # print('** PCA **')
+        # print('Reducing from ', np.array(featureset).shape)
+        # pca = decomposition.PCA(n_components=512, whiten=True)
+        # featureset = pca.fit_transform(np.array(featureset))
+        # print('Reduced to ', np.array(featureset).shape)
+
+        classify_svm(featureset, labelset, 1000, 0.8)
 
         # k = 10
         # fold_a = []
@@ -108,26 +122,16 @@ def classify(env, mode=0, limit=-1):
         acc = np.mean(correct)
         print('Completed recall: ', acc)
 
-p1 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '1'])
-p3 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '2'])
-p4 = subprocess.Popen(['python3', 'extract.py', 'field', '15', '4', '3'])
+
+print('** EXTRACTING **')
+p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '1'])
+p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '2'])
+p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '3'])
 
 p1.wait()
 p2.wait()
 p3.wait()
 p4.wait()
 
-classify('field')
-
-# p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '0'])
-# p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '1'])
-# p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '2'])
-# p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '100', '4', '3'])
-#
-# p1.wait()
-# p2.wait()
-# p3.wait()
-# p4.wait()
-#
-# classify('lab')
+classify('lab')

@@ -1,5 +1,6 @@
 import glob
 import os
+import sys
 from math import ceil, floor, sqrt
 
 import cv2
@@ -82,44 +83,46 @@ def print_count(t):
     print('Total: '.ljust(35), str(count).rjust(9))
 
 
-def resize(env, show=False):
+def resize(env, limit=-1, step=1, base=0, show=False):
     count = 0
     for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
         new_path = 'dataset/images/'+env+'_r/' + '/'.join(species_path.split('/')[3:])
         if not os.path.exists(new_path):
             os.makedirs(new_path)
-        for image_path in sorted(glob.glob(species_path + '/*')):
-            count += 1
-            print('Processed: ', count, end="\r")
-            new_img_path = new_path + '/' + image_path.split('/')[-1]
-            image = cv2.imread(image_path)
-            h, w = image.shape[:2]
-            sqs = max(h, w)
-            hd = (sqs - h) / 2
-            wd = (sqs - w) / 2
-            if wd != 0:
-                a = np.mean(image[:,0],axis=0)
-                b = np.mean(image[:,w-1],axis=0)
-            else:
-                a = np.mean(image[0,:],axis=0)
-                b = np.mean(image[h-1,:],axis=0)
-            edge_colour = (a + b) / 2
-            squared = cv2.copyMakeBorder(image, top=floor(hd), bottom=ceil(hd), left=floor(wd),
-                right=ceil(wd), borderType=cv2.BORDER_CONSTANT, value=edge_colour)
-            resized = cv2.resize(squared, (OUT_SIZE, OUT_SIZE))
-            if show:
-                cv2.destroyAllWindows()
-                cv2.imshow(image_path, resized)
-                cv2.waitKey(0)
-                break
-            else:
-                cv2.imwrite(new_img_path, resized)
+        for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+            if step == 1 or (step > 1 and (i - base) % step == 0):
+                count += 1
+                print('Processed: ', count, end="\r")
+                new_img_path = new_path + '/' + image_path.split('/')[-1]
+                image = cv2.imread(image_path)
+                h, w = image.shape[:2]
+                sqs = max(h, w)
+                hd = (sqs - h) / 2
+                wd = (sqs - w) / 2
+                if wd != 0:
+                    a = np.mean(image[:,0],axis=0)
+                    b = np.mean(image[:,w-1],axis=0)
+                else:
+                    a = np.mean(image[0,:],axis=0)
+                    b = np.mean(image[h-1,:],axis=0)
+                edge_colour = (a + b) / 2
+                squared = cv2.copyMakeBorder(image, top=floor(hd), bottom=ceil(hd), left=floor(wd),
+                    right=ceil(wd), borderType=cv2.BORDER_CONSTANT, value=edge_colour)
+                resized = cv2.resize(squared, (OUT_SIZE, OUT_SIZE))
+                if show:
+                    cv2.destroyAllWindows()
+                    cv2.imshow(image_path, resized)
+                    cv2.waitKey(0)
+                else:
+                    cv2.imwrite(new_img_path, resized)
+                if show or (limit > 0 and i >= limit):
+                    break
 
 def isolate_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(grey, np.median(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
+    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV) # TODO field 0.6, lab 0.5?
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, vib = cv2.split(hsv)
     _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
@@ -200,3 +203,13 @@ def segment(env, show=False):
                 cv2.waitKey(0)
                 break
             cv2.imwrite(new_img_path, segmentation)
+
+def main(argv):
+    if len(argv)==1:
+        resize(argv[0])
+    else:
+        resize(argv[0], int(argv[1]), int(argv[2]), int(argv[3]))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
