@@ -45,7 +45,6 @@ def classify_svm(featureset,labelset,C,gamma):
 
 
 def classify(env, mode=0, limit=-1):
-    print('** CLASSIFYING **')
     # X_train, X_test, y_train, y_test = train_test_split(featureset, labelset, test_size=0.2, random_state=0)
     #
     # tuned_parameters = [{'kernel': ['rbf'], 'gamma': [1e-3, 1e-4],
@@ -91,7 +90,7 @@ def classify(env, mode=0, limit=-1):
         # featureset = pca.fit_transform(np.array(featureset))
         # print('Reduced to ', np.array(featureset).shape)
 
-        classify_svm(featureset, labelset, 1000, 0.8)
+        classify_svm(featureset, labelset, 1000, 1) # TODO tweak
 
         # k = 10
         # fold_a = []
@@ -124,14 +123,13 @@ def classify(env, mode=0, limit=-1):
 
 
 print('** EXTRACTING **')
-p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '1'])
-p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '2'])
-p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '-1', '4', '3'])
+p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '1'])
+p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '2'])
 
 p1.wait()
 p2.wait()
 p3.wait()
-p4.wait()
 
+print('** CLASSIFYING **')
 classify('lab')

@@ -1,3 +1,5 @@
+import functools
+
 import numpy
 from keras import optimizers
 from keras.layers import (Activation, Conv2D, Dense, Dropout, Flatten, GlobalMaxPool1D, MaxPooling2D)
@@ -60,8 +62,10 @@ model.add(Dense(2048, activation='relu'))
 model.add(Dropout(0.4))
 model.add(Dense(184, activation='softmax'))
 
-top2_acc = functools.partial(keras.metrics.top_k_categorical_accuracy, k=2)
-top2_acc = functools.partial(keras.metrics.top_k_categorical_accuracy, k=3)
+top2_acc = functools.partial(top_k_categorical_accuracy, k=2)
+top2_acc.__name__ = 'top2_acc'
+top3_acc = functools.partial(top_k_categorical_accuracy, k=3)
+top3_acc.__name__ = 'top3_acc'
 
 sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
 model.compile(loss='categorical_crossentropy',
