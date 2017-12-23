@@ -12,9 +12,9 @@ from keras.metrics import top_k_categorical_accuracy
 from keras.models import Sequential
 from keras.utils import to_categorical
 
-BATCH_SIZE = 96
+BATCH_SIZE = 512
 F_LEN = 65 * 3
-EPOCHS = 512
+EPOCHS = 4096
 
 def make_model(d, w, act, norm=False, dropout=0.5):
     model = Sequential()
@@ -102,8 +102,8 @@ def do(data, name, model):
 if __name__ == "__main__":
     # extract_fs('lab', -1)
     data = load_data('lab')
-    d = 8
-    w = 256
-    do = 0.3
-    model = make_model(d, w, 'relu', dropout=do)
-    do(data, 'nets/lrelu_T_'+str(d)+'_'+str(w)+'_'+str(do), model)
+    depth = 8
+    width = 512
+    drop = 0.3
+    model = make_model(depth, width, 'relu', dropout=drop)
+    do(data, 'nets/relu_'+str(depth)+'_'+str(width)+'_'+str(drop), model)
