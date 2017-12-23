@@ -1,70 +1,82 @@
+#! /usr/local/bin/python3
+
 import functools
 import glob
+import subprocess
 
 import keras
 import numpy as np
 from keras.callbacks import ModelCheckpoint
-from keras.layers import Activation, Dense, Dropout, BatchNormalization, Conv1D, Flatten, MaxPooling1D
-from keras.models import Sequential
+from keras.layers import (Activation, BatchNormalization, Conv1D, Dense, Dropout, Flatten, LeakyReLU, MaxPooling1D, PReLU)
 from keras.metrics import top_k_categorical_accuracy
+from keras.models import Sequential
 from keras.utils import to_categorical
 
-BATCH_SIZE = 192
+BATCH_SIZE = 96
+F_LEN = 65 * 3
 EPOCHS = 512
 
-def do(env):
+def make_model(d, w, act, norm=False, dropout=0.5):
+    model = Sequential()
+    model.add(Dense(w, input_dim=F_LEN))
+    for i in range(d - 1):
+        if i > 0:
+            model.add(Dense(w))
+        if norm:
+            model.add(BatchNormalization())
+        if act == 'lrelu':
+            model.add(LeakyReLU())
+        else:
+            model.add(Activation(act))
+        model.add(Dropout(dropout))
+    model.add(Dense(184, activation='softmax'))
+    return model
+
+
+def load_data(env):
     train_l = []
     train_f = []
-    test_l = []
-    test_f = []
-
+    val_l = []
+    val_f = []
     print('** LOADING **')
     count = 0
     for j, species_path in enumerate(sorted(glob.glob('dataset/mlp_features/' + env + '/*'))):
         for i, feature_path in enumerate(sorted(glob.glob(species_path + '/*'))):
-            f = np.load(feature_path) / 255
-            if i < 10:
-                test_l.append(j)
-                test_f.append(f)
+            f = np.load(feature_path)
+            if i < 20:
+                val_l.append(j)
+                val_f.append(f)
             else:
                 train_l.append(j)
                 train_f.append(f)
             count += 1
             print('Loaded:', count, end='\r')
-    print('Train Set:', len(train_l))
-    print('Test Set:', len(test_l))
-    train_f = np.array(train_f).reshape((len(train_l), 128))
-    test_f = np.array(test_f).reshape((len(test_l), 128))
+    print('Training Data:', len(train_l))
+    print('Validation Data:', len(val_l))
+    train_f = np.array(train_f).reshape((len(train_l), F_LEN))
     train_l = to_categorical(train_l, num_classes=184)
-    test_l = to_categorical(test_l, num_classes=184)
+    val_f = np.array(val_f).reshape((len(val_l), F_LEN))
+    val_l = to_categorical(val_l, num_classes=184)
+    return (train_f, val_f, train_l, val_l)
+
+
+def extract_fs(env, lim):
+    print('** EXTRACTING **')
+    p1 = subprocess.Popen(['python3', 'extract.py', env, str(lim), '4', '0', '2'])
+    p2 = subprocess.Popen(['python3', 'extract.py', env, str(lim), '4', '1', '2'])
+    p3 = subprocess.Popen(['python3', 'extract.py', env, str(lim), '4', '2', '2'])
+    p4 = subprocess.Popen(['python3', 'extract.py', env, str(lim), '4', '3', '2'])
+
+    p1.wait()
+    p2.wait()
+    p3.wait()
+    p4.wait()
+
+
+def do(data, name, model):
+    train_f, val_f, train_l, val_l = data
 
     print('** TRAINING **')
-    model = Sequential()
-    model.add(Dense(128, use_bias=False, input_dim=128))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(512, use_bias=False))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1024, use_bias=False))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1024, use_bias=False))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1024, use_bias=False))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(512, use_bias=False))
-    model.add(BatchNormalization())
-    model.add(Activation('tanh'))
-    model.add(Dropout(0.5))
-    model.add(Dense(184, activation='softmax'))
 
     top2_acc = functools.partial(top_k_categorical_accuracy, k=2)
     top2_acc.__name__ = 'top2_acc'
@@ -72,20 +84,26 @@ def do(env):
     top3_acc.__name__ = 'top3_acc'
 
     model.compile(loss='categorical_crossentropy',
-                  optimizer='rmsprop',
+                  optimizer='adam',
                   metrics=['accuracy', top2_acc, top3_acc])
-                  
-    history = model.fit(train_f, 
-                        train_l, 
-                        batch_size=BATCH_SIZE, 
-                        epochs=EPOCHS, 
-                        validation_data=(test_f, test_l),
-                        callbacks=[ModelCheckpoint('WIP.h5', monitor='val_acc', save_best_only=True)])
 
-    print(history.history)
-    print('** EVALUATING **')
-    score = model.evaluate(test_f, test_l, batch_size=BATCH_SIZE)
-    print(score)
+    history = model.fit(train_f,
+                        train_l,
+                        batch_size=BATCH_SIZE,
+                        epochs=EPOCHS,
+                        validation_data=(val_f, val_l),
+                        callbacks=[ModelCheckpoint(name + '.h5', monitor='val_acc', save_best_only=True)])
+    print(name, 'DONE')
+    np.save(name + 'training', history.history)
+    # print('** EVALUATING **')
+    # score = model.evaluate(val_f, val_l, batch_size=BATCH_SIZE)
+    # print(score)
 
 if __name__ == "__main__":
-    do('lab')
+    # extract_fs('lab', -1)
+    data = load_data('lab')
+    d = 8
+    w = 256
+    do = 0.3
+    model = make_model(d, w, 'relu', dropout=do)
+    do(data, 'nets/lrelu_T_'+str(d)+'_'+str(w)+'_'+str(do), model)

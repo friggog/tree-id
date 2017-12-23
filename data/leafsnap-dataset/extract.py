@@ -5,6 +5,7 @@ from math import ceil, floor, sqrt
 
 import cv2
 import numpy as np
+import scipy as sp
 from sklearn.preprocessing import normalize
 
 import matplotlib.pyplot as plt
@@ -12,9 +13,9 @@ import matplotlib.pyplot as plt
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def get_curvature_map(line, segment, scale=0.1):
+def get_curvature_map(line, segment, scale=0.1, length=128):
     curv = []
-    l = 192 # 128 > 65, 256 > 66
+    l = length
     r = max(int(len(line) * scale), 2)
     a = np.pi * pow(r, 2)
     for i in range(0, len(line), max(floor(len(line) / l), 1)):
@@ -42,32 +43,40 @@ def write_curvature_image(path, curve, segment):
     cv2.imwrite(path, maps)
 
 # FEATURES #
-def f_glcm(image):
-    gl = np.zeros((256, 256), np.uint8)
-    h, w = image.shape[:2]
-    for i in range(h - 1):
-        for j in range(w - 1):
-            if image[i, j] != 0 and image[i, j + 1] != 0:
-                gl[image[i, j], image[i, j + 1]] += 1
-                gl[image[i, j], image[i + 1, j]] += 1
-    gl = gl / gl.sum() / 2
-    energy = 0
-    contrast = 0
-    homogenity = 0
-    IDM = 0
+def entropy(seq):
+    r = seq / np.sum(seq)
     entropy = 0
-    for i in range(255):
-        for j in range(255):
-            energy += pow(gl[i, j], 2)
-            contrast += (i - j) * (i - j) * gl[i, j]
-            homogenity += gl[i, j] / (1 + abs(i - j))
-            if i != j:
-                IDM += gl[i, j] / pow(i - j, 2)
-            if gl[i, j] != 0:
-                entropy -= gl[i, j] * np.log10(gl[i, j])
-            mean = + 0.5 * (i * gl[i, j] + j * gl[i, j])
-    # print( 100*energy, contrast/200, homogenity, IDM, entropy/5)
-    return 100 * energy, contrast / 200, homogenity, IDM, entropy / 5
+    for q in r:
+        entropy -= q * np.nan_to_num(np.log2(q))
+    return entropy
+
+
+# def f_glcm(image):
+#     gl = np.zeros((256, 256), np.uint8)
+#     h, w = image.shape[:2]
+#     for i in range(h - 1):
+#         for j in range(w - 1):
+#             if image[i, j] != 0 and image[i, j + 1] != 0:
+#                 gl[image[i, j], image[i, j + 1]] += 1
+#                 gl[image[i, j], image[i + 1, j]] += 1
+#     gl = gl / gl.sum() / 2
+#     energy = 0
+#     contrast = 0
+#     homogenity = 0
+#     IDM = 0
+#     entropy = 0
+#     for i in range(255):
+#         for j in range(255):
+#             energy += pow(gl[i, j], 2)
+#             contrast += (i - j) * (i - j) * gl[i, j]
+#             homogenity += gl[i, j] / (1 + abs(i - j))
+#             if i != j:
+#                 IDM += gl[i, j] / pow(i - j, 2)
+#             if gl[i, j] != 0:
+#                 entropy -= gl[i, j] * np.log10(gl[i, j])
+#             mean = + 0.5 * (i * gl[i, j] + j * gl[i, j])
+#     # print( 100*energy, contrast/200, homogenity, IDM, entropy/5)
+#     return 100 * energy, contrast / 200, homogenity, IDM, entropy / 5
 
 
 def f_curvature_stat(curvature_map):
@@ -92,34 +101,71 @@ def f_curvature_stat(curvature_map):
     sd = np.diff(curvature_map, n=2)
     out.append(np.mean(sd))
     out.append(np.mean(np.abs(sd)))
+    # ZERO CROSSING
+    zcr = 0
+    zero_c_map = curvature_map - 0.35  # TODO TUNE 0.35
+    for i in range(1, len(curvature_map)):
+        zcr += (zero_c_map[i] * zero_c_map[i - 1] < 0)
+    zcr /= len(zero_c_map)
+    out.append(zcr)
+    # ENTROPY
+    p = np.histogram(curvature_map, bins=128) # TODO TUNE 128
+    out.append(entropy(p[0]) / 10)
+    #
     return out
 
 
-def f_curvature_hist(curvature_map):
-    n_bins = 32
-    hist = np.histogram(curvature_map, bins=n_bins, density=True)
-    return hist[0]
-
-
 def f_basic_shape(cnt, a, l):
+    out = []
     # SOLIDITY
     hull = cv2.convexHull(cnt)
     ha = cv2.contourArea(hull)
     solidity = 1
     if ha != 0:
         solidity = a / ha
+    out.append(solidity)
     # CONVEXITY
-    convexity = cv2.arcLength(hull, False) / l
-    # SQUARENESS
+    # EXCL
+    # convexity = cv2.arcLength(hull, False) / l
+    # out.append(convexity)
+    # ECCENTRICITY
+    # EXCL
     rect = cv2.minAreaRect(cnt)
     w, h = rect[1]
-    ratio = min(w, h) / max(w, h)
-    return [solidity, convexity, ratio]
+    # eccentricity = min(w, h) / max(w, h)
+    # out.append(eccentricity)
+    # CIRCULARITY
+    circularity = (4 * np.pi * a) / (l**2)
+    out.append(circularity)
+    # RECTANGULARITY
+    rectangularity = a / (w * h)
+    out.append(rectangularity)
+    # COMPACTNESS
+    # very similar to circularity above
+    compactness = l / a
+    out.append(compactness)
+    #
+    return out
 
 
 def f_fft(cnt):
-    f = np.abs(np.fft.rfft(cnt, n=len(cnt)))
-    return f/f.max()
+    # REAL FFT
+    x = np.abs(np.fft.rfft(cnt, len(cnt)))
+    # SPECTRAL CENTROID
+    f = np.fft.rfftfreq(len(cnt))
+    c = 0
+    for i in range(len(x)):
+        c += f[i] * x[i]
+    c /= np.sum(x)
+    # SPECTRAL ENTROPY
+    p = np.power(x, 2) / len(x)
+    e= entropy(p)
+    #
+    x /= x.max()
+    out = x.tolist()
+    out.append(c)
+    out.append(e)
+    return out
 
 # EXTRACTION #
 def isolate_leaf(image):
@@ -173,12 +219,14 @@ def get_features(path, show=False):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    for h in range(0, 15, 5):
-        c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300)
-        # c = c_map[h,:]
+    curvatures = np.load(path.replace('images', 'cmaps_for_f')+'.npy')
+    for c in curvatures: # h in [0, 4, 8]:
+        # c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300)
+        # curvatures.append(c)
         f.extend(f_fft(c))
-        f.extend(f_curvature_stat(c/255))
-    f = np.nan_to_num(f)
+        f.extend(f_curvature_stat(c / 255))
+    # np.save(path.replace('images', 'cmaps_for_f'), curvatures)
+    f = np.nan_to_num(f)  # to be safe
     return f
 
 
@@ -190,22 +238,33 @@ def get_curvature_maps(path):
         if contour is not None and segmentation is not None:
             write_curvature_image(c_path, contour, segmentation)
 
+
 def curve_map_for_mlp(path):
     image = cv2.imread(path)
-    c_path = path.replace('images', 'mlp_features')
+    c_path = path.replace('images', 'mlp_features').split('.')[0]
     if not os.path.exists(c_path):
         grey, contour, area, length, segmentation = isolate_leaf(image)
         if contour is not None and segmentation is not None:
-            c = get_curvature_map(contour, segmentation, scale=0.05)
-            np.save(c_path, c)
-    
+            fs =[]
+            for h in [0, 4, 8]:
+                c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300, length=128)
+                f = np.abs(np.fft.rfft(c, n=len(c)))
+                f = f / f.max()
+                fs.extend(f)
+            np.save(c_path, fs)
+
 
 def extract(env, limit=-1, step=1, base=0, mode=0, show=False):
     images = {}
     count = 0
+    skipped = 0
     for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
         if mode == 0:
             new_path = species_path.replace('images', 'features')
+            #TEMP
+            np2 = species_path.replace('images', 'cmaps_for_f')
+            if not os.path.exists(np2):
+                os.makedirs(np2)
         elif mode == 1:
             new_path = species_path.replace('images', 'curvature_maps')
         else:
@@ -219,22 +278,24 @@ def extract(env, limit=-1, step=1, base=0, mode=0, show=False):
                     features = get_features(image_path, show)
                     if features is not None:
                         np.save(f_path, features)
+                    else:
+                        skipped += 1
                 elif mode == 1:
                     get_curvature_maps(image_path)
                 else:
                     curve_map_for_mlp(image_path)
                 count += 1
-                print('Done:', str(count).rjust(6), end="\r")
+                print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end="\r")
             if show or (limit > 0 and i >= limit):
                 break
-    print('Done:', str(count).rjust(6))
-        
+    print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
+
 
 def main(argv):
-    if len(argv) == 1:
-        extract(argv[0], mode=2)
+    if len(argv) == 2:
+        extract(argv[0], mode=int(argv[1]))
     else:
-        extract(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=0)
+        extract(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
 
 
 if __name__ == "__main__":

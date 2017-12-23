@@ -1,19 +1,20 @@
+#! /usr/local/bin/python3
+
 import glob
 import subprocess
+import time
+import warnings
 
 import numpy as np
-import time
-
-from sklearn.model_selection import cross_validate
-from sklearn.svm import SVC, LinearSVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.exceptions import UndefinedMetricWarning
 from sklearn import decomposition
+from sklearn.exceptions import UndefinedMetricWarning
+from sklearn.model_selection import cross_validate
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC, LinearSVC
 
 from extract import extract
 from preprocess import resize
 
-import warnings
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
 
@@ -35,101 +36,82 @@ def load_features(env, limit=-1, start=0):
     return featureset, labelset
 
 
-
-def classify_svm(featureset,labelset,C,gamma):
-    clf = SVC(kernel='rbf', C=C, gamma=gamma, class_weight='balanced')
-    scores = cross_validate(clf, featureset, labelset, cv=5, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
+def cv_eval(model, featureset, labelset, folds=5):
+    scores = cross_validate(model, featureset, labelset, cv=folds, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
     print('Precision:'.ljust(20), np.mean(scores['test_precision_macro']))
     print('Recall'.ljust(20), np.mean(scores['test_recall_macro']))
     print('F1'.ljust(20), np.mean(scores['test_f1_macro']))
 
 
+def top_k_scores(model, predicted, labels, k):
+    order = np.argsort(predicted, axis=1)
+    n = model.classes_[order[:, -k:]]
+    predited_z = zip(labels, n)
+    u_labels = np.unique(labels)
+    TP = 0.
+    FN = 0.
+    # FP = 0.
+    # TN = 0.
+    r = 0.
+    for L in u_labels:
+        for x, y in predited_z:
+            if x == L:
+                if L in y:
+                    TP += 1
+                else:
+                    FN += 1
+            # else:
+            #     if L in y:
+            #         FP += 1
+            #     else:
+            #         TN += 1
+        if TP == 0:
+            recall = 0
+        else:
+            recall = TP / (TP + FN)
+        r += recall
+    r /= len(u_labels)
+    return r #p, r, 2*p*r/(p+r)
+
+
 def classify(env, mode=0, limit=-1):
-    # X_train, X_test, y_train, y_test = train_test_split(featureset, labelset, test_size=0.2, random_state=0)
-    #
-    # tuned_parameters = [{'kernel': ['rbf'], 'gamma': [1e-3, 1e-4],
-    #                      'C': [1, 10, 100, 1000]},
-    #                     {'kernel': ['linear'], 'C': [1, 10, 100, 1000]}]
-    #
-    # scores = ['precision', 'recall']
-    #
-    # for score in scores:
-    #     print("# Tuning hyper-parameters for %s" % score)
-    #     print()
-    #
-    #     clf = GridSearchCV(SVC(), tuned_parameters, cv=5, scoring='%s_macro' % score)
-    #     clf.fit(X_train, y_train)
-    #
-    #     print("Best parameters set found on development set:")
-    #     print()
-    #     print(clf.best_params_)
-    #     print()
-    #     print("Grid scores on development set:")
-    #     print()
-    #     means = clf.cv_results_['mean_test_score']
-    #     stds = clf.cv_results_['std_test_score']
-    #     for mean, std, params in zip(means, stds, clf.cv_results_['params']):
-    #         print("%0.3f (+/-%0.03f) for %r"
-    #               % (mean, std * 2, params))
-    #     print()
-    #
-    #     print("Detailed classification report:")
-    #     print()
-    #     print("The model is trained on the full development set.")
-    #     print("The scores are computed on the full evaluation set.")
-    #     print()
-    #     y_true, y_pred = y_test, clf.predict(X_test)
-    #     print(classification_report(y_true, y_pred))
-    #     print()
-
-    if mode == 0:
-        featureset, labelset = load_features(env, limit=limit)
-        # print('** PCA **')
-        # print('Reducing from ', np.array(featureset).shape)
-        # pca = decomposition.PCA(n_components=512, whiten=True)
-        # featureset = pca.fit_transform(np.array(featureset))
-        # print('Reduced to ', np.array(featureset).shape)
-
-        classify_svm(featureset, labelset, 1000, 1) # TODO tweak
-
-        # k = 10
-        # fold_a = []
-        # for i in range(k):
-        #     train_f = [item for index, item in enumerate(featureset) if (index - i) % k != 0]
-        #     train_l = [item for index, item in enumerate(labelset) if (index - i) % k != 0]
-        #     clf.fit(train_f, train_l)
-        #     test_f = featureset[i::10]
-        #     test_l = labelset[i::10]
-        #     predicted = clf.predict(test_f)
-        #     correct = predicted == test_l
-        #     acc = np.mean(correct)
-        #     print('Fold', i + 1, 'complete with recall:', acc)
-        #     fold_a.append(acc)
-        # # TO SAVE
-        # print('Completed with average recall: ', np.mean(fold_a))
-    elif mode == 1:
-        clf = SVC(kernel='rbf', C=1000, class_weight='balanced')
-        train_fs, train_ls = load_features('lab_r')
-        train_fs2, train_ls2 = load_features('field_r', start=3)
-        train_fs.extend(train_fs2)
-        train_ls.extend(train_ls2)
-        clf.fit(train_fs, train_ls)
-        joblib.dump(clf, 'SVM.pkl')
-        test_fs, test_ls = load_features('field_r', limit=3, start=0)
-        predicted = clf.predict(test_fs)
-        correct = predicted == test_ls
-        acc = np.mean(correct)
-        print('Completed recall: ', acc)
-
+    featureset, labelset = load_features(env, limit=limit)
+    clf = SVC(kernel='rbf', C=1000, gamma=1.5, class_weight='balanced', probability=True)
+    cv_eval(clf, featureset, labelset)
+    return
+    print('')
+    k = 5
+    r1 = 0.
+    r3 = 0.
+    r5 = 0.
+    for i in range(k):
+        train_f = [item for index, item in enumerate(featureset) if (index - i) % k != 0]
+        train_l = [item for index, item in enumerate(labelset) if (index - i) % k != 0]
+        test_f = featureset[i::k]
+        test_l = labelset[i::k]
+        clf.fit(train_f, train_l)
+        predicted = clf.predict_proba(test_f)
+        r1f = top_k_scores(clf, predicted, test_l, 1)
+        r3f = top_k_scores(clf, predicted, test_l, 3)
+        r5f = top_k_scores(clf, predicted, test_l, 5)
+        r1 += r1f
+        r3 += r3f
+        r5 += r5f
+    r1 /= k
+    r3 /= k
+    r5 /= k
+    print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
 print('** EXTRACTING **')
-p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '1'])
-p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '15', '3', '2'])
+p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '0', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '1', '0'])
+p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '2', '0'])
+p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '3', '0'])
 
 p1.wait()
 p2.wait()
 p3.wait()
+p4.wait()
 
 print('** CLASSIFYING **')
 classify('lab')
