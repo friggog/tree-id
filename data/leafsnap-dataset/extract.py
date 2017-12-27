@@ -219,13 +219,13 @@ def get_features(path, show=False):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    curvatures = np.load(path.replace('images', 'cmaps_for_f')+'.npy')
-    for c in curvatures: # h in [0, 4, 8]:
-        # c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300)
-        # curvatures.append(c)
+    curvatures = [] #np.load(path.replace('images', 'cmaps_for_f')+'.npy')
+    for  h in [0.01, 0.025, 0.05, 0.1, 0.2]: #c in curvatures:
+        c = get_curvature_map(contour, segmentation, scale=h) #(h*3+10)/300)
+        curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
-    # np.save(path.replace('images', 'cmaps_for_f'), curvatures)
+    np.save(path.replace('images', 'cmaps_for_f'), curvatures)
     f = np.nan_to_num(f)  # to be safe
     return f
 
@@ -254,48 +254,53 @@ def curve_map_for_mlp(path):
             np.save(c_path, fs)
 
 
-def extract(env, limit=-1, step=1, base=0, mode=0, show=False):
+def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
     images = {}
     count = 0
     skipped = 0
-    for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
-        if mode == 0:
-            new_path = species_path.replace('images', 'features')
-            #TEMP
-            np2 = species_path.replace('images', 'cmaps_for_f')
-            if not os.path.exists(np2):
-                os.makedirs(np2)
-        elif mode == 1:
-            new_path = species_path.replace('images', 'curvature_maps')
-        else:
-            new_path = species_path.replace('images', 'mlp_features')
-        if not os.path.exists(new_path):
-            os.makedirs(new_path)
-        for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
-            if step == 1 or (step > 1 and (i - base) % step == 0):
-                if mode == 0:
-                    f_path = new_path + '/' + image_path.split('/')[-1].split('.')[0]
-                    features = get_features(image_path, show)
-                    if features is not None:
-                        np.save(f_path, features)
+    if test:
+        envs = ['train', 'test']
+    else:
+        envs = ['train']
+    for env in envs:
+        for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
+            if mode == 0:
+                new_path = species_path.replace('images', 'features')
+                #TEMP
+                np2 = species_path.replace('images', 'cmaps_for_f')
+                if not os.path.exists(np2):
+                    os.makedirs(np2)
+            elif mode == 1:
+                new_path = species_path.replace('images', 'curvature_maps')
+            else:
+                new_path = species_path.replace('images', 'mlp_features')
+            if not os.path.exists(new_path):
+                os.makedirs(new_path)
+            for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+                if step == 1 or (step > 1 and (i - base) % step == 0):
+                    if mode == 0:
+                        f_path = new_path + '/' + image_path.split('/')[-1].split('.')[0]
+                        features = get_features(image_path, show)
+                        if features is not None:
+                            np.save(f_path, features)
+                        else:
+                            skipped += 1
+                    elif mode == 1:
+                        get_curvature_maps(image_path)
                     else:
-                        skipped += 1
-                elif mode == 1:
-                    get_curvature_maps(image_path)
-                else:
-                    curve_map_for_mlp(image_path)
-                count += 1
-                print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end="\r")
-            if show or (limit > 0 and i >= limit):
-                break
+                        curve_map_for_mlp(image_path)
+                    count += 1
+                    print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
+                if show or (limit > 0 and i >= limit):
+                    break
     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
 
 
 def main(argv):
     if len(argv) == 2:
-        extract(argv[0], mode=int(argv[1]))
+        extract(mode=int(argv[0]))
     else:
-        extract(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
+        extract(test=(argv[0] == 'True'), limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
 
 
 if __name__ == "__main__":

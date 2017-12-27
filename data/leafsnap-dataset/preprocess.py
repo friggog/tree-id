@@ -1,7 +1,10 @@
+#! /usr/local/bin/python3
+
 import glob
 import os
 import sys
 from math import ceil, floor, sqrt
+from shutil import copyfile
 
 import cv2
 import numpy as np
@@ -204,11 +207,39 @@ def segment(env, show=False):
                 break
             cv2.imwrite(new_img_path, segmentation)
 
+
+def split():
+    train_paths = []
+    test_paths = []
+    test_counts = {}
+    for env in ['field', 'lab']:
+        for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
+            species = species_path.split('/')[-1]
+            test_path = species_path.replace('/'+env+'/', '/test/')
+            if not os.path.exists(test_path):
+                os.makedirs(test_path)
+            train_path = species_path.replace('/'+env+'/', '/train/')
+            if not os.path.exists(train_path):
+                os.makedirs(train_path)
+            paths = glob.glob(species_path + '/*')
+            if species not in test_counts:
+                test_counts[species] = 0
+            for i, path in enumerate(paths):
+                if test_counts[species] < 15:
+                    test_paths.append((path, path.replace('/'+env+'/', '/test/')))
+                    test_counts[species] += 1
+                else:
+                    train_paths.append((path, path.replace('/'+env+'/', '/train/')))
+    print('Train'.ljust(10), len(train_paths))
+    print('Test'.ljust(10), len(test_paths))
+    for pin, pout in train_paths:
+        copyfile(pin, pout)
+    for pin, pout in test_paths:
+        copyfile(pin, pout)
+
+
 def main(argv):
-    if len(argv)==1:
-        resize(argv[0])
-    else:
-        resize(argv[0], int(argv[1]), int(argv[2]), int(argv[3]))
+    split()
 
 
 if __name__ == "__main__":

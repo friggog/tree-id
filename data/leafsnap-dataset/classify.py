@@ -2,15 +2,14 @@
 
 import glob
 import subprocess
-import time
 import warnings
 
 import numpy as np
-from sklearn import decomposition
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.model_selection import cross_validate
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC, LinearSVC
+from sklearn.externals import joblib
 
 from extract import extract
 from preprocess import resize
@@ -18,22 +17,31 @@ from preprocess import resize
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
 
-def load_features(env, limit=-1, start=0):
-    featureset = []
-    labelset = []
-    for species_path in sorted(glob.glob('dataset/features/' + env + '/*')):
+def load_features(test, limit=-1):
+    train_f = []
+    train_l = []
+    test_f = []
+    test_l = []
+    for species_path in sorted(glob.glob('dataset/features/train/*')):
         species = species_path.split('/')[-1]
-        for i, f_path in enumerate(sorted(glob.glob(species_path + '/*'))):
-            if i < start:
-                continue
+        for i, f_path in enumerate(glob.glob(species_path + '/*')):
             features = np.load(f_path)
             if features is not None:
                 if len(features) != 0:
-                    featureset.append(features)
-                    labelset.append(species)
+                    train_f.append(features)
+                    train_l.append(species)
             if (limit > 0 and i >= limit):
                 break
-    return featureset, labelset
+    if test:
+        for species_path in sorted(glob.glob('dataset/features/test/*')):
+            species = species_path.split('/')[-1]
+            for i, f_path in enumerate(glob.glob(species_path + '/*')):
+                features = np.load(f_path)
+                if features is not None:
+                    if len(features) != 0:
+                        test_f.append(features)
+                        test_l.append(species)
+    return train_f, train_l, test_f, test_l
 
 
 def cv_eval(model, featureset, labelset, folds=5):
@@ -59,6 +67,7 @@ def top_k_scores(model, predicted, labels, k):
                 if L in y:
                     TP += 1
                 else:
+
                     FN += 1
             # else:
             #     if L in y:
@@ -71,42 +80,31 @@ def top_k_scores(model, predicted, labels, k):
             recall = TP / (TP + FN)
         r += recall
     r /= len(u_labels)
-    return r #p, r, 2*p*r/(p+r)
+    return r  # p, r, 2*p*r/(p+r)
 
 
-def classify(env, mode=0, limit=-1):
-    featureset, labelset = load_features(env, limit=limit)
-    clf = SVC(kernel='rbf', C=1000, gamma=1.5, class_weight='balanced', probability=True)
-    cv_eval(clf, featureset, labelset)
-    return
-    print('')
-    k = 5
-    r1 = 0.
-    r3 = 0.
-    r5 = 0.
-    for i in range(k):
-        train_f = [item for index, item in enumerate(featureset) if (index - i) % k != 0]
-        train_l = [item for index, item in enumerate(labelset) if (index - i) % k != 0]
-        test_f = featureset[i::k]
-        test_l = labelset[i::k]
+def classify(test, limit=-1):
+    train_f, train_l, test_f, test_l = load_features(test, limit)
+    clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced', probability=True)
+    cv_eval(clf, train_f, train_l)
+    if test:
         clf.fit(train_f, train_l)
+        joblib.dump(clf, 'SVM.pkl')
         predicted = clf.predict_proba(test_f)
-        r1f = top_k_scores(clf, predicted, test_l, 1)
-        r3f = top_k_scores(clf, predicted, test_l, 3)
-        r5f = top_k_scores(clf, predicted, test_l, 5)
-        r1 += r1f
-        r3 += r3f
-        r5 += r5f
-    r1 /= k
-    r3 /= k
-    r5 /= k
-    print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
+        r1 = top_k_scores(clf, predicted, test_l, 1)
+        r3 = top_k_scores(clf, predicted, test_l, 3)
+        r5 = top_k_scores(clf, predicted, test_l, 5)
+        print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
+
+
+test = True
+lim = -1
 
 print('** EXTRACTING **')
-p1 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '0', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '1', '0'])
-p3 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '2', '0'])
-p4 = subprocess.Popen(['python3', 'extract.py', 'lab', '40', '4', '3', '0'])
+p1 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '0', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '1', '0'])
+p3 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '2', '0'])
+p4 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '3', '0'])
 
 p1.wait()
 p2.wait()
@@ -114,4 +112,4 @@ p3.wait()
 p4.wait()
 
 print('** CLASSIFYING **')
-classify('lab')
+classify(test, lim)
