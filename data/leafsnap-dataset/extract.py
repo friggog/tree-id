@@ -1,14 +1,10 @@
 import glob
 import os
 import sys
-from math import ceil, floor, sqrt
+from math import floor, sqrt
 
 import cv2
 import numpy as np
-import scipy as sp
-from sklearn.preprocessing import normalize
-
-import matplotlib.pyplot as plt
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -43,6 +39,8 @@ def write_curvature_image(path, curve, segment):
     cv2.imwrite(path, maps)
 
 # FEATURES #
+
+
 def entropy(seq):
     r = seq / np.sum(seq)
     entropy = 0
@@ -109,7 +107,7 @@ def f_curvature_stat(curvature_map):
     zcr /= len(zero_c_map)
     out.append(zcr)
     # ENTROPY
-    p = np.histogram(curvature_map, bins=128) # TODO TUNE 128
+    p = np.histogram(curvature_map, bins=128)  # TODO TUNE 128
     out.append(entropy(p[0]) / 10)
     #
     return out
@@ -159,7 +157,7 @@ def f_fft(cnt):
     c /= np.sum(x)
     # SPECTRAL ENTROPY
     p = np.power(x, 2) / len(x)
-    e= entropy(p)
+    e = entropy(p)
     #
     x /= x.max()
     out = x.tolist()
@@ -168,6 +166,8 @@ def f_fft(cnt):
     return out
 
 # EXTRACTION #
+
+
 def isolate_leaf(image):
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -195,7 +195,7 @@ def isolate_leaf(image):
         try:
             cx = int(M['m10'] / M['m00'])
             cy = int(M['m01'] / M['m00'])
-        except:
+        except Exception:
             continue
         dc = sqrt(pow(abs(w / 2 - cx), 2) + pow(abs(h / 2 - cy), 2))
         if dc < (h * w / 750) and a > curr[1]:
@@ -219,9 +219,9 @@ def get_features(path, show=False):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    curvatures = [] #np.load(path.replace('images', 'cmaps_for_f')+'.npy')
-    for  h in [0.01, 0.025, 0.05, 0.1, 0.2]: #c in curvatures:
-        c = get_curvature_map(contour, segmentation, scale=h) #(h*3+10)/300)
+    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f')+'.npy')
+    for h in [0.01, 0.025, 0.05, 0.1]:  # [0.01, 0.025, 0.05, 0.1, 0.2]: #c in curvatures:
+        c = get_curvature_map(contour, segmentation, scale=h)  # (h*3+10)/300)
         curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
@@ -245,9 +245,9 @@ def curve_map_for_mlp(path):
     if not os.path.exists(c_path):
         grey, contour, area, length, segmentation = isolate_leaf(image)
         if contour is not None and segmentation is not None:
-            fs =[]
+            fs = []
             for h in [0, 4, 8]:
-                c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300, length=128)
+                c = get_curvature_map(contour, segmentation, scale=(h * 3 + 10) / 300, length=128)
                 f = np.abs(np.fft.rfft(c, n=len(c)))
                 f = f / f.max()
                 fs.extend(f)
@@ -255,7 +255,6 @@ def curve_map_for_mlp(path):
 
 
 def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
-    images = {}
     count = 0
     skipped = 0
     if test:
@@ -266,7 +265,7 @@ def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
         for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
             if mode == 0:
                 new_path = species_path.replace('images', 'features')
-                #TEMP
+                # TEMP
                 np2 = species_path.replace('images', 'cmaps_for_f')
                 if not os.path.exists(np2):
                     os.makedirs(np2)

@@ -4,10 +4,9 @@ import functools
 import glob
 import subprocess
 
-import keras
 import numpy as np
 from keras.callbacks import ModelCheckpoint
-from keras.layers import (Activation, BatchNormalization, Conv1D, Dense, Dropout, Flatten, LeakyReLU, MaxPooling1D, PReLU)
+from keras.layers import (Activation, BatchNormalization, Dense, Dropout, LeakyReLU)
 from keras.metrics import top_k_categorical_accuracy
 from keras.models import Sequential
 from keras.utils import to_categorical
@@ -15,6 +14,7 @@ from keras.utils import to_categorical
 BATCH_SIZE = 512
 F_LEN = 65 * 3
 EPOCHS = 4096
+
 
 def make_model(d, w, act, norm=False, dropout=0.5):
     model = Sequential()
@@ -99,6 +99,7 @@ def do(data, name, model):
     # score = model.evaluate(val_f, val_l, batch_size=BATCH_SIZE)
     # print(score)
 
+
 if __name__ == "__main__":
     # extract_fs('lab', -1)
     data = load_data('lab')
@@ -106,4 +107,4 @@ if __name__ == "__main__":
     width = 512
     drop = 0.3
     model = make_model(depth, width, 'relu', dropout=drop)
-    do(data, 'nets/relu_'+str(depth)+'_'+str(width)+'_'+str(drop), model)
+    do(data, 'nets/relu_' +str(depth) +'_' +str(width) +'_' +str(drop), model)

@@ -7,12 +7,11 @@ import warnings
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.model_selection import cross_validate
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC, LinearSVC
+from sklearn.svm import SVC
 from sklearn.externals import joblib
 
-from extract import extract
-from preprocess import resize
+# from extract import extract
+# from preprocess import resize
 
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
@@ -67,7 +66,6 @@ def top_k_scores(model, predicted, labels, k):
                 if L in y:
                     TP += 1
                 else:
-
                     FN += 1
             # else:
             #     if L in y:
@@ -85,7 +83,7 @@ def top_k_scores(model, predicted, labels, k):
 
 def classify(test, limit=-1):
     train_f, train_l, test_f, test_l = load_features(test, limit)
-    clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced', probability=True)
+    clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced')  # , probability=True)
     cv_eval(clf, train_f, train_l)
     if test:
         clf.fit(train_f, train_l)
@@ -97,14 +95,14 @@ def classify(test, limit=-1):
         print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
 
-test = True
-lim = -1
+TEST = False
+LIM = 50
 
 print('** EXTRACTING **')
-p1 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '0', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '1', '0'])
-p3 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '2', '0'])
-p4 = subprocess.Popen(['python3', 'extract.py', str(test), str(lim), '4', '3', '0'])
+p1 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '0', '0'])
+p2 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '1', '0'])
+p3 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '2', '0'])
+p4 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '3', '0'])
 
 p1.wait()
 p2.wait()
@@ -112,4 +110,4 @@ p3.wait()
 p4.wait()
 
 print('** CLASSIFYING **')
-classify(test, lim)
+classify(TEST, LIM)
