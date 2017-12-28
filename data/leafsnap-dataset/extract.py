@@ -1,24 +1,19 @@
 import glob
 import os
 import sys
-from math import ceil, floor, sqrt
+from math import floor, sqrt
 
 import cv2
 import numpy as np
-import scipy as sp
-from sklearn.preprocessing import normalize
-
-import matplotlib.pyplot as plt
 
 np.seterr(divide='ignore', invalid='ignore')
 
 
 def get_curvature_map(line, segment, scale=0.1, length=128):
     curv = []
-    l = length
     r = max(int(len(line) * scale), 2)
     a = np.pi * pow(r, 2)
-    for i in range(0, len(line), max(floor(len(line) / l), 1)):
+    for i in range(0, len(line), max(floor(len(line) / length), 1)):
         mask = np.zeros(segment.shape[:2], np.uint8)
         c = line[i][0]
         cv2.circle(mask, (int(c[0]), int(c[1])), r, (255, 255, 255), -1)
@@ -26,8 +21,8 @@ def get_curvature_map(line, segment, scale=0.1, length=128):
         o = np.sum(res) / a
         curv.append(o)
     c = np.array(curv, np.uint8)
-    if len(c) != l:
-        c = cv2.resize(c, (1, l)).reshape(l)
+    if len(c) != length:
+        c = cv2.resize(c, (1, length)).reshape(length)
     return c
 
 
@@ -43,6 +38,8 @@ def write_curvature_image(path, curve, segment):
     cv2.imwrite(path, maps)
 
 # FEATURES #
+
+
 def entropy(seq):
     r = seq / np.sum(seq)
     entropy = 0
@@ -109,7 +106,7 @@ def f_curvature_stat(curvature_map):
     zcr /= len(zero_c_map)
     out.append(zcr)
     # ENTROPY
-    p = np.histogram(curvature_map, bins=128) # TODO TUNE 128
+    p = np.histogram(curvature_map, bins=128)  # TODO TUNE 128
     out.append(entropy(p[0]) / 10)
     #
     return out
@@ -127,13 +124,13 @@ def f_basic_shape(cnt, a, l):
     # CONVEXITY
     # EXCL
     # convexity = cv2.arcLength(hull, False) / l
-    # out.append(convexity)
+    # out.append(convexity)  # TODO add back??
     # ECCENTRICITY
     # EXCL
     rect = cv2.minAreaRect(cnt)
     w, h = rect[1]
     # eccentricity = min(w, h) / max(w, h)
-    # out.append(eccentricity)
+    # out.append(eccentricity)  # TODO add back??
     # CIRCULARITY
     circularity = (4 * np.pi * a) / (l**2)
     out.append(circularity)
@@ -159,15 +156,17 @@ def f_fft(cnt):
     c /= np.sum(x)
     # SPECTRAL ENTROPY
     p = np.power(x, 2) / len(x)
-    e= entropy(p)
+    e = entropy(p)
     #
     x /= x.max()
-    out = x.tolist()
+    out = x.tolist()  # TODO test this
     out.append(c)
     out.append(e)
     return out
 
 # EXTRACTION #
+
+
 def isolate_leaf(image):
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -195,7 +194,7 @@ def isolate_leaf(image):
         try:
             cx = int(M['m10'] / M['m00'])
             cy = int(M['m01'] / M['m00'])
-        except:
+        except Exception:
             continue
         dc = sqrt(pow(abs(w / 2 - cx), 2) + pow(abs(h / 2 - cy), 2))
         if dc < (h * w / 750) and a > curr[1]:
@@ -219,13 +218,14 @@ def get_features(path, show=False):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    curvatures = np.load(path.replace('images', 'cmaps_for_f')+'.npy')
-    for c in curvatures: # h in [0, 4, 8]:
-        # c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300)
-        # curvatures.append(c)
+    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
+    scales = [0.01, 0.025, 0.05, 0.1, 0.2]  # TODO vary scales
+    for h in scales:  # c in curvatures:
+        c = get_curvature_map(contour, segmentation, scale=h, length=128)  # TODO vary length (h*3+10)/300)
+        curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
-    # np.save(path.replace('images', 'cmaps_for_f'), curvatures)
+    np.save(path.replace('images', 'cmaps_for_f'), curvatures)
     f = np.nan_to_num(f)  # to be safe
     return f
 
@@ -245,57 +245,61 @@ def curve_map_for_mlp(path):
     if not os.path.exists(c_path):
         grey, contour, area, length, segmentation = isolate_leaf(image)
         if contour is not None and segmentation is not None:
-            fs =[]
+            fs = []
             for h in [0, 4, 8]:
-                c = get_curvature_map(contour, segmentation, scale=(h*3+10)/300, length=128)
+                c = get_curvature_map(contour, segmentation, scale=(h * 3 + 10) / 300, length=128)
                 f = np.abs(np.fft.rfft(c, n=len(c)))
                 f = f / f.max()
                 fs.extend(f)
             np.save(c_path, fs)
 
 
-def extract(env, limit=-1, step=1, base=0, mode=0, show=False):
-    images = {}
+def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
     count = 0
     skipped = 0
-    for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
-        if mode == 0:
-            new_path = species_path.replace('images', 'features')
-            #TEMP
-            np2 = species_path.replace('images', 'cmaps_for_f')
-            if not os.path.exists(np2):
-                os.makedirs(np2)
-        elif mode == 1:
-            new_path = species_path.replace('images', 'curvature_maps')
-        else:
-            new_path = species_path.replace('images', 'mlp_features')
-        if not os.path.exists(new_path):
-            os.makedirs(new_path)
-        for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
-            if step == 1 or (step > 1 and (i - base) % step == 0):
-                if mode == 0:
-                    f_path = new_path + '/' + image_path.split('/')[-1].split('.')[0]
-                    features = get_features(image_path, show)
-                    if features is not None:
-                        np.save(f_path, features)
+    if test:
+        envs = ['train', 'test']
+    else:
+        envs = ['train']
+    for env in envs:
+        for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
+            if mode == 0:
+                new_path = species_path.replace('images', 'features')
+                # TEMP
+                np2 = species_path.replace('images', 'cmaps_for_f')
+                if not os.path.exists(np2):
+                    os.makedirs(np2)
+            elif mode == 1:
+                new_path = species_path.replace('images', 'curvature_maps')
+            else:
+                new_path = species_path.replace('images', 'mlp_features')
+            if not os.path.exists(new_path):
+                os.makedirs(new_path)
+            for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
+                if step == 1 or (step > 1 and (i - base) % step == 0):
+                    if mode == 0:
+                        f_path = new_path + '/' + image_path.split('/')[-1].split('.')[0]
+                        features = get_features(image_path, show)
+                        if features is not None:
+                            np.save(f_path, features)
+                        else:
+                            skipped += 1
+                    elif mode == 1:
+                        get_curvature_maps(image_path)
                     else:
-                        skipped += 1
-                elif mode == 1:
-                    get_curvature_maps(image_path)
-                else:
-                    curve_map_for_mlp(image_path)
-                count += 1
-                print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end="\r")
-            if show or (limit > 0 and i >= limit):
-                break
+                        curve_map_for_mlp(image_path)
+                    count += 1
+                    print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
+                if show or (limit > 0 and i >= limit):
+                    break
     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
 
 
 def main(argv):
     if len(argv) == 2:
-        extract(argv[0], mode=int(argv[1]))
+        extract(mode=int(argv[0]))
     else:
-        extract(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
+        extract(test=(argv[0] == 'True'), limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
 
 
 if __name__ == "__main__":

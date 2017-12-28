@@ -1,7 +1,10 @@
+#! /usr/local/bin/python3
+
 import glob
 import os
 import sys
 from math import ceil, floor, sqrt
+from shutil import copyfile
 
 import cv2
 import numpy as np
@@ -14,13 +17,14 @@ W_THRESH = 0.5
 K_SIZE = 10
 OUT_SIZE = 512
 
+
 def cut_edges(env, show=False):
-    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
+    for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
         if not os.path.exists(species_path):
             os.makedirs(species_path)
         for image_path in sorted(glob.glob(species_path + '/*')):
             print(image_path)
-            new_path = 'dataset/images/'+env+'_p/' + '/'.join(image_path.split('/')[3:])
+            new_path = 'dataset/images/' +env +'_p/' + '/'.join(image_path.split('/')[3:])
             image = cv2.imread(image_path)
             h, w = image.shape[:2]
             grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -85,8 +89,8 @@ def print_count(t):
 
 def resize(env, limit=-1, step=1, base=0, show=False):
     count = 0
-    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
-        new_path = 'dataset/images/'+env+'_r/' + '/'.join(species_path.split('/')[3:])
+    for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
+        new_path = 'dataset/images/' +env +'_r/' + '/'.join(species_path.split('/')[3:])
         if not os.path.exists(new_path):
             os.makedirs(new_path)
         for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
@@ -100,14 +104,14 @@ def resize(env, limit=-1, step=1, base=0, show=False):
                 hd = (sqs - h) / 2
                 wd = (sqs - w) / 2
                 if wd != 0:
-                    a = np.mean(image[:,0],axis=0)
-                    b = np.mean(image[:,w-1],axis=0)
+                    a = np.mean(image[:, 0], axis=0)
+                    b = np.mean(image[:, w -1], axis=0)
                 else:
-                    a = np.mean(image[0,:],axis=0)
-                    b = np.mean(image[h-1,:],axis=0)
+                    a = np.mean(image[0, :], axis=0)
+                    b = np.mean(image[h -1, :], axis=0)
                 edge_colour = (a + b) / 2
                 squared = cv2.copyMakeBorder(image, top=floor(hd), bottom=ceil(hd), left=floor(wd),
-                    right=ceil(wd), borderType=cv2.BORDER_CONSTANT, value=edge_colour)
+                                             right=ceil(wd), borderType=cv2.BORDER_CONSTANT, value=edge_colour)
                 resized = cv2.resize(squared, (OUT_SIZE, OUT_SIZE))
                 if show:
                     cv2.destroyAllWindows()
@@ -118,11 +122,12 @@ def resize(env, limit=-1, step=1, base=0, show=False):
                 if show or (limit > 0 and i >= limit):
                     break
 
+
 def isolate_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV) # TODO field 0.6, lab 0.5?
+    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, vib = cv2.split(hsv)
     _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
@@ -143,27 +148,29 @@ def isolate_leaf(path):
             curr = (cnt, a, l)
     if curr[0] is None:
         return None, None
-    segment = np.zeros((h,w), np.uint8)
-    cv2.drawContours(segment, [curr[0]], -1, color=(255,255,255), thickness=-1)
+    segment = np.zeros((h, w), np.uint8)
+    cv2.drawContours(segment, [curr[0]], -1, color=(255, 255, 255), thickness=-1)
     return segment, curr[0]
+
 
 def get_curvature_map(line, segment, scale=25):
     curv = []
     r = scale
-    ha = np.pi * pow(r,2) / 2
-    for i in range(0, len(line), max(int(len(line)/100),1)):
+    ha = np.pi * pow(r, 2) / 2
+    for i in range(0, len(line), max(int(len(line) /100), 1)):
         mask = np.zeros(segment.shape[:2], np.uint8)
         c = line[i][0]
-        cv2.circle(mask, (int(c[0]),int(c[1])), r, (255,255,255), -1)
+        cv2.circle(mask, (int(c[0]), int(c[1])), r, (255, 255, 255), -1)
         res = cv2.bitwise_and(mask, segment)
-        o = (np.sum(res/255) - ha) / ha
+        o = (np.sum(res /255) - ha) / ha
         curv.append(o)
     return curv
 
+
 def get_curvature(env, show=False):
     count = 0
-    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
-        new_path = 'dataset/curvatures/'+env+'/'+'/'.join(species_path.split('/')[3:])
+    for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
+        new_path = 'dataset/curvatures/' +env +'/' +'/'.join(species_path.split('/')[3:])
         if not os.path.exists(new_path):
             os.makedirs(new_path)
         for image_path in sorted(glob.glob(species_path + '/*')):
@@ -174,9 +181,9 @@ def get_curvature(env, show=False):
             if segmentation is None or contour is None:
                 continue
             maps = []
-            for h in range(1,150,25):
+            for h in range(1, 150, 25):
                 maps.append(get_curvature_map(contour, segmentation, h))
-            out = (np.array(maps)+1)/2
+            out = (np.array(maps) +1) /2
             if show:
                 cv2.destroyAllWindows()
                 cv2.imshow(image_path, out)
@@ -184,10 +191,11 @@ def get_curvature(env, show=False):
                 break
             cv2.imwrite(new_img_path, out)
 
+
 def segment(env, show=False):
     count = 0
-    for species_path in sorted(glob.glob('dataset/images/'+env+'/*')):
-        new_path = 'dataset/segmentations/'+env+'/'+'/'.join(species_path.split('/')[3:])
+    for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
+        new_path = 'dataset/segmentations/' +env +'/' +'/'.join(species_path.split('/')[3:])
         if not os.path.exists(new_path):
             os.makedirs(new_path)
         for image_path in sorted(glob.glob(species_path + '/*')):
@@ -204,11 +212,39 @@ def segment(env, show=False):
                 break
             cv2.imwrite(new_img_path, segmentation)
 
+
+def split():
+    train_paths = []
+    test_paths = []
+    test_counts = {}
+    for env in ['field', 'lab']:
+        for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
+            species = species_path.split('/')[-1]
+            test_path = species_path.replace('/' +env +'/', '/test/')
+            if not os.path.exists(test_path):
+                os.makedirs(test_path)
+            train_path = species_path.replace('/' +env +'/', '/train/')
+            if not os.path.exists(train_path):
+                os.makedirs(train_path)
+            paths = glob.glob(species_path + '/*')
+            if species not in test_counts:
+                test_counts[species] = 0
+            for i, path in enumerate(paths):
+                if test_counts[species] < 15:
+                    test_paths.append((path, path.replace('/' +env +'/', '/test/')))
+                    test_counts[species] += 1
+                else:
+                    train_paths.append((path, path.replace('/' +env +'/', '/train/')))
+    print('Train'.ljust(10), len(train_paths))
+    print('Test'.ljust(10), len(test_paths))
+    for pin, pout in train_paths:
+        copyfile(pin, pout)
+    for pin, pout in test_paths:
+        copyfile(pin, pout)
+
+
 def main(argv):
-    if len(argv)==1:
-        resize(argv[0])
-    else:
-        resize(argv[0], int(argv[1]), int(argv[2]), int(argv[3]))
+    resize(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), show=False)
 
 
 if __name__ == "__main__":
