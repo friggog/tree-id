@@ -127,7 +127,7 @@ def isolate_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV)  # TODO field 0.6, lab 0.5?
+    _, thresh = cv2.threshold(grey, np.median(grey) * 0.5, 255, cv2.THRESH_BINARY_INV)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, vib = cv2.split(hsv)
     _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
@@ -244,7 +244,7 @@ def split():
 
 
 def main(argv):
-    split()
+    resize(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), show=False)
 
 
 if __name__ == "__main__":

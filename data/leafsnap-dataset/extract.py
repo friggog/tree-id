@@ -11,10 +11,9 @@ np.seterr(divide='ignore', invalid='ignore')
 
 def get_curvature_map(line, segment, scale=0.1, length=128):
     curv = []
-    l = length
     r = max(int(len(line) * scale), 2)
     a = np.pi * pow(r, 2)
-    for i in range(0, len(line), max(floor(len(line) / l), 1)):
+    for i in range(0, len(line), max(floor(len(line) / length), 1)):
         mask = np.zeros(segment.shape[:2], np.uint8)
         c = line[i][0]
         cv2.circle(mask, (int(c[0]), int(c[1])), r, (255, 255, 255), -1)
@@ -22,8 +21,8 @@ def get_curvature_map(line, segment, scale=0.1, length=128):
         o = np.sum(res) / a
         curv.append(o)
     c = np.array(curv, np.uint8)
-    if len(c) != l:
-        c = cv2.resize(c, (1, l)).reshape(l)
+    if len(c) != length:
+        c = cv2.resize(c, (1, length)).reshape(length)
     return c
 
 
@@ -125,13 +124,13 @@ def f_basic_shape(cnt, a, l):
     # CONVEXITY
     # EXCL
     # convexity = cv2.arcLength(hull, False) / l
-    # out.append(convexity)
+    # out.append(convexity)  # TODO add back??
     # ECCENTRICITY
     # EXCL
     rect = cv2.minAreaRect(cnt)
     w, h = rect[1]
     # eccentricity = min(w, h) / max(w, h)
-    # out.append(eccentricity)
+    # out.append(eccentricity)  # TODO add back??
     # CIRCULARITY
     circularity = (4 * np.pi * a) / (l**2)
     out.append(circularity)
@@ -160,7 +159,7 @@ def f_fft(cnt):
     e = entropy(p)
     #
     x /= x.max()
-    out = x.tolist()
+    out = x.tolist()  # TODO test this
     out.append(c)
     out.append(e)
     return out
@@ -219,9 +218,10 @@ def get_features(path, show=False):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f')+'.npy')
-    for h in [0.01, 0.025, 0.05, 0.1]:  # [0.01, 0.025, 0.05, 0.1, 0.2]: #c in curvatures:
-        c = get_curvature_map(contour, segmentation, scale=h)  # (h*3+10)/300)
+    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
+    scales = [0.01, 0.025, 0.05, 0.1, 0.2]  # TODO vary scales
+    for h in scales:  # c in curvatures:
+        c = get_curvature_map(contour, segmentation, scale=h, length=128)  # TODO vary length (h*3+10)/300)
         curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))

@@ -3,12 +3,14 @@
 import glob
 import subprocess
 import warnings
+import time
 
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.model_selection import cross_validate
-from sklearn.svm import SVC
+from sklearn.svm import SVC, NuSVC
 from sklearn.externals import joblib
+from sklearn.decomposition import PCA
 
 # from extract import extract
 # from preprocess import resize
@@ -21,6 +23,7 @@ def load_features(test, limit=-1):
     train_l = []
     test_f = []
     test_l = []
+    count = 0
     for species_path in sorted(glob.glob('dataset/features/train/*')):
         species = species_path.split('/')[-1]
         for i, f_path in enumerate(glob.glob(species_path + '/*')):
@@ -29,9 +32,13 @@ def load_features(test, limit=-1):
                 if len(features) != 0:
                     train_f.append(features)
                     train_l.append(species)
+                    count += 1
+                    print('Loaded:', count, end='\r')
             if (limit > 0 and i >= limit):
                 break
+    print('Loaded:', count)
     if test:
+        count = 0
         for species_path in sorted(glob.glob('dataset/features/test/*')):
             species = species_path.split('/')[-1]
             for i, f_path in enumerate(glob.glob(species_path + '/*')):
@@ -40,6 +47,9 @@ def load_features(test, limit=-1):
                     if len(features) != 0:
                         test_f.append(features)
                         test_l.append(species)
+                        count += 1
+                        print('Loaded:', count, end='\r')
+        print('Loaded:', count)
     return train_f, train_l, test_f, test_l
 
 
@@ -81,13 +91,31 @@ def top_k_scores(model, predicted, labels, k):
     return r  # p, r, 2*p*r/(p+r)
 
 
-def classify(test, limit=-1):
+def classify(test, limit=-1, reduce=0, gamma=1, save=False):
+    print('** CLASSIFYING **')
+    print('-> loading data')
     train_f, train_l, test_f, test_l = load_features(test, limit)
-    clf = SVC(kernel='rbf', C=1000, gamma=1, class_weight='balanced')  # , probability=True)
+    if reduce > 0:
+        print('-> reducing dimensionality')
+        reduction = PCA(n_components=reduce)
+        if save:
+            joblib.dump(reduction, 'PCA.lzma', compress=9)
+        train_f = reduction.fit_transform(train_f)
+        if test:
+            test_f = reduction.transform(test_f)
+        print('Reduced to', reduce)
+    # clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
+    clf = NuSVC(kernel='rbf', nu=0.05, gamma=gamma, class_weight='balanced', probability=False)
+    print('-> fitting')
+    t = time.time()
     cv_eval(clf, train_f, train_l)
+    print('Fitted in', (time.time() - t))
     if test:
+        print('-> testing')
+        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=True)
         clf.fit(train_f, train_l)
-        joblib.dump(clf, 'SVM.pkl')
+        if save:
+            joblib.dump(clf, 'SVM.lzma', compress=9)
         predicted = clf.predict_proba(test_f)
         r1 = top_k_scores(clf, predicted, test_l, 1)
         r3 = top_k_scores(clf, predicted, test_l, 3)
@@ -95,19 +123,22 @@ def classify(test, limit=-1):
         print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
 
-TEST = False
-LIM = 50
+def extract(test=False, limit=-1):
+    print('** EXTRACTING **')
+    p1 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '0', '0'])
+    p2 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '1', '0'])
+    p3 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '2', '0'])
+    p4 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '3', '0'])
+    p1.wait()
+    p2.wait()
+    p3.wait()
+    p4.wait()
 
-print('** EXTRACTING **')
-p1 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '0', '0'])
-p2 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '1', '0'])
-p3 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '2', '0'])
-p4 = subprocess.Popen(['python3', 'extract.py', str(TEST), str(LIM), '4', '3', '0'])
 
-p1.wait()
-p2.wait()
-p3.wait()
-p4.wait()
-
-print('** CLASSIFYING **')
-classify(TEST, LIM)
+if __name__ == '__main__':
+    # extract()
+    # best gamma = 4.1
+    # Precision:           0.766273217534
+    # Recall               0.756495503248
+    # F1                   0.756065998008
+    classify(test=False, limit=-1, reduce=64, gamma=4.1)
