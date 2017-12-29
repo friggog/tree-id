@@ -8,7 +8,7 @@ import time
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.model_selection import cross_validate
-from sklearn.svm import SVC, NuSVC
+from sklearn.svm import SVC
 from sklearn.externals import joblib
 from sklearn.decomposition import PCA
 
@@ -91,7 +91,7 @@ def top_k_scores(model, predicted, labels, k):
     return r  # p, r, 2*p*r/(p+r)
 
 
-def classify(test, limit=-1, reduce=0, gamma=1, save=False):
+def classify(cv=True, test=False, limit=-1, reduce=0, gamma=1, save=False):
     print('** CLASSIFYING **')
     print('-> loading data')
     train_f, train_l, test_f, test_l = load_features(test, limit)
@@ -104,12 +104,12 @@ def classify(test, limit=-1, reduce=0, gamma=1, save=False):
         if test:
             test_f = reduction.transform(test_f)
         print('Reduced to', reduce)
-    # clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
-    clf = NuSVC(kernel='rbf', nu=0.05, gamma=gamma, class_weight='balanced', probability=False)
-    print('-> fitting')
-    t = time.time()
-    cv_eval(clf, train_f, train_l)
-    print('Fitted in', (time.time() - t))
+    clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
+    if cv:
+        t = time.time()
+        print('-> fitting')
+        cv_eval(clf, train_f, train_l)
+        print('Fitted in', (time.time() - t))
     if test:
         print('-> testing')
         clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=True)
@@ -137,8 +137,4 @@ def extract(test=False, limit=-1):
 
 if __name__ == '__main__':
     # extract()
-    # best gamma = 4.1
-    # Precision:           0.766273217534
-    # Recall               0.756495503248
-    # F1                   0.756065998008
-    classify(test=False, limit=-1, reduce=64, gamma=4.1)
+    classify(cv=True, test=True, save=True, limit=-1, reduce=64, gamma=4.1)
