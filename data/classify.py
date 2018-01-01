@@ -9,7 +9,7 @@ import sys
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.model_selection import cross_validate
-from sklearn.svm import SVC, NuSVC
+from sklearn.svm import SVC
 from sklearn.externals import joblib
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix, accuracy_score
@@ -100,10 +100,9 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False):
         if test:
             test_f = reduction.transform(test_f)
         print('Reduced to', reduce)
-    # clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
-    clf = NuSVC(kernel='rbf', nu=0.05, gamma=gamma, class_weight='balanced', probability=False)
-    print('-> fitting')
+    clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
     t = time.time()
+    print('-> fitting')
     cv_eval(clf, train_f, train_l)
     print('Fitted in', (time.time() - t))
     if test:
