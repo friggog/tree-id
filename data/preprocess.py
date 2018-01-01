@@ -213,28 +213,28 @@ def segment(env, show=False):
             cv2.imwrite(new_img_path, segmentation)
 
 
-def split():
+def split(dataset, n):
     train_paths = []
     test_paths = []
     test_counts = {}
-    for env in ['field', 'lab']:
-        for species_path in sorted(glob.glob('dataset/images/' +env +'/*')):
+    for env in ['all']:  # 'field', 'lab']:
+        for species_path in sorted(glob.glob(dataset +'/images/' + env + '/*')):
             species = species_path.split('/')[-1]
-            test_path = species_path.replace('/' +env +'/', '/test/')
+            test_path = species_path.replace('/' + env + '/', '/test/')
             if not os.path.exists(test_path):
                 os.makedirs(test_path)
-            train_path = species_path.replace('/' +env +'/', '/train/')
+            train_path = species_path.replace('/' + env + '/', '/train/')
             if not os.path.exists(train_path):
                 os.makedirs(train_path)
             paths = glob.glob(species_path + '/*')
             if species not in test_counts:
                 test_counts[species] = 0
             for i, path in enumerate(paths):
-                if test_counts[species] < 15:
-                    test_paths.append((path, path.replace('/' +env +'/', '/test/')))
+                if test_counts[species] < n:
+                    test_paths.append((path, path.replace('/' + env + '/', '/test/')))
                     test_counts[species] += 1
                 else:
-                    train_paths.append((path, path.replace('/' +env +'/', '/train/')))
+                    train_paths.append((path, path.replace('/' + env + '/', '/train/')))
     print('Train'.ljust(10), len(train_paths))
     print('Test'.ljust(10), len(test_paths))
     for pin, pout in train_paths:
@@ -244,7 +244,7 @@ def split():
 
 
 def main(argv):
-    resize(argv[0], limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), show=False)
+    split(argv[0], int(argv[1]))
 
 
 if __name__ == "__main__":

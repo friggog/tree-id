@@ -1,3 +1,5 @@
+#! /usr/local/bin/python3
+
 import glob
 import os
 import sys
@@ -5,6 +7,7 @@ from math import floor, sqrt
 
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -23,6 +26,12 @@ def get_curvature_map(line, segment, scale=0.1, length=128):
     c = np.array(curv, np.uint8)
     if len(c) != length:
         c = cv2.resize(c, (1, length)).reshape(length)
+    # plt.plot(c)
+    # plt.acorr(c - np.mean(c), maxlags=32)
+    # plt.show()
+    # cv2.imshow('o', segment)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
     return c
 
 
@@ -32,12 +41,17 @@ def write_curvature_image(path, curve, segment):
         c = get_curvature_map(curve, segment, scale=h / 300)
         maps.append(c)
     maps = np.array(maps, np.uint8).reshape((16, 128))
-    # cv2.imshow('o', maps)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
     cv2.imwrite(path, maps)
 
 # FEATURES #
+
+
+def autocorr(x):
+    x -= np.mean(x)
+    c = np.correlate(x, x, mode=2)
+    c /= np.sqrt(np.dot(x, x) * np.dot(x, x))
+    c = c[len(x):]
+    return c
 
 
 def entropy(seq):
@@ -78,37 +92,50 @@ def entropy(seq):
 
 def f_curvature_stat(curvature_map):
     out = []
+
     # BENDING ENERGY
     s = 0
     for k in curvature_map:
         s += pow(k, 2)
     s /= len(curvature_map)
     out.append(s)
+
     # MEAN
     out.append(np.mean(curvature_map))
+
     # STD
     out.append(np.std(curvature_map))
+
     # FIRST DIFF
     # mean of basic and absolute
     fd = np.diff(curvature_map, n=1)
     out.append(np.mean(fd))
     out.append(np.mean(np.abs(fd)))
+
     # SECOND DIFF
     # mean of basic and absolute
     sd = np.diff(curvature_map, n=2)
     out.append(np.mean(sd))
     out.append(np.mean(np.abs(sd)))
-    # ZERO CROSSING
-    zcr = 0
-    zero_c_map = curvature_map - 0.35  # TODO TUNE 0.35
-    for i in range(1, len(curvature_map)):
-        zcr += (zero_c_map[i] * zero_c_map[i - 1] < 0)
-    zcr /= len(zero_c_map)
-    out.append(zcr)
+
     # ENTROPY
     p = np.histogram(curvature_map, bins=128)  # TODO TUNE 128
     out.append(entropy(p[0]) / 10)
-    #
+
+    # AUTOCORRELATION
+    # TODO
+    # acorr = autocorr(curvature_map)
+    # plt.plot(acorr[0::4])
+    # plt.show()
+    # out.extend(acorr[0::4])
+    # ZERO CROSSING
+    # zcr = 0
+    # print(np.mean(curvature_map), np.median(curvature_map))
+    # for i in range(1, len(acorr)):
+    #     zcr += (acorr[i] * acorr[i - 1] < 0)
+    # zcr /= 50
+    # out.append(zcr)
+
     return out
 
 
@@ -155,19 +182,20 @@ def f_fft(cnt):
         c += f[i] * x[i]
     c /= np.sum(x)
     # SPECTRAL ENTROPY
-    p = np.power(x, 2) / len(x)
-    e = entropy(p)
+    # p = np.power(x, 2) / len(x)
+    # e = entropy(p)
     #
     x /= x.max()
     out = x.tolist()  # TODO test this
     out.append(c)
-    out.append(e)
+    # out.append(e)
     return out
 
 # EXTRACTION #
 
 
-def isolate_leaf(image):
+def isolate_leafsnap_leaf(path):
+    image = cv2.imread(path)
     h, w = image.shape[:2]
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(grey, np.median(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
@@ -201,60 +229,147 @@ def isolate_leaf(image):
             curr = (cnt, a, l)
     if curr[0] is None:
         return None, None, None, None, None
-    # cv2.drawContours(image, [curr[0]], -1, color=(255,255,0))
-    # cv2.imshow('d',image)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    segment = np.zeros((h, w), np.uint8)
-    cv2.drawContours(segment, [curr[0]], -1, color=(255, 255, 255), thickness=-1)
-    return grey, curr[0], curr[1], curr[2], segment
+    # segment = np.zeros((h, w), np.uint8)
+    # cv2.drawContours(segment, [curr[0]], -1, color=(255, 255, 255), thickness=-1)
+    return grey, curr[0], curr[1], curr[2], thresh  # segment
 
 
-def get_features(path, show=False):
+def isolate_foliage_leaf(path):
     image = cv2.imread(path)
+    h, w = image.shape[:2]
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(grey, 220, 255, cv2.THRESH_BINARY_INV)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if l < 30:
+            continue
+        if a > curr[1]:
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        return None, None, None, None, None
+    return grey, curr[0], curr[1], curr[2], thresh
+
+
+def isolate_swedish_leaf(path):
+    image = cv2.imread(path)
+    h, w = image.shape[:2]
+    s = 1000 / max(h, w)
+    image = cv2.resize(image, (int(s * w), int(s * h)))
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh_raw = cv2.threshold(grey, 200, 255, cv2.THRESH_BINARY_INV)
+    thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, np.ones((15, 15), np.uint8)))
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if l < 30:
+            continue
+        if a > curr[1]:
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        return None, None, None, None, None
+    return grey, curr[0], curr[1], curr[2], thresh_raw
+
+
+def isolate_flavia_leaf(path):
+    image = cv2.imread(path)
+    h, w = image.shape[:2]
+    s = 1000 / max(h, w)
+    image = cv2.resize(image, (int(s * w), int(s * h)))
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(grey, 200, 255, cv2.THRESH_BINARY_INV)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if l < 30:
+            continue
+        if a > curr[1]:
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        return None, None, None, None, None
+    return grey, curr[0], curr[1], curr[2], thresh
+
+
+def isolate_leaves_leaf(path):
+    grey = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+    _, thresh = cv2.threshold(grey, 250, 255, cv2.THRESH_BINARY)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if l < 30:
+            continue
+        if a > curr[1]:
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        return None, None, None, None, None
+    segment = cv2.imread(path, 0)
+    return segment, curr[0], curr[1], curr[2], segment
+
+
+def get_features(dataset, path):
     # c_map = cv2.imread(path.replace('images', 'curvature_maps'), 0)
-    grey, contour, area, length, segmentation = isolate_leaf(image)
+    if dataset == 'foliage':
+        isolate_leaf = isolate_foliage_leaf
+    elif dataset == 'leaves':
+        isolate_leaf = isolate_leaves_leaf
+    elif dataset == 'swedish':
+        isolate_leaf = isolate_swedish_leaf
+    elif dataset == 'leafsnap':
+        isolate_leaf = isolate_leafsnap_leaf
+    elif dataset == 'flavia':
+        isolate_leaf = isolate_flavia_leaf
+    else:
+        raise Exception('invalid dataset')
+    grey, contour, area, length, segmentation = isolate_leaf(path)
     if contour is None or segmentation is None:
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
-    scales = [0.01, 0.025, 0.05, 0.1, 0.2]  # TODO vary scales
+    # curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
+    scales = [0.01, 0.025, 0.05, 0.1, 0.15]  # TODO vary scales
     for h in scales:  # c in curvatures:
         c = get_curvature_map(contour, segmentation, scale=h, length=128)  # TODO vary length (h*3+10)/300)
-        curvatures.append(c)
+        # curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
-    np.save(path.replace('images', 'cmaps_for_f'), curvatures)
+    # np.save(path.replace('images', 'cmaps_for_f'), curvatures)
     f = np.nan_to_num(f)  # to be safe
     return f
 
 
-def get_curvature_maps(path):
-    image = cv2.imread(path)
-    c_path = path.replace('images', 'curvature_maps')
-    if not os.path.exists(c_path):
-        grey, contour, area, length, segmentation = isolate_leaf(image)
-        if contour is not None and segmentation is not None:
-            write_curvature_image(c_path, contour, segmentation)
+# def get_curvature_maps(path):
+#     image = cv2.imread(path)
+#     c_path = path.replace('images', 'curvature_maps')
+#     if not os.path.exists(c_path):
+#         grey, contour, area, length, segmentation = isolate_leaf(image)
+#         if contour is not None and segmentation is not None:
+#             write_curvature_image(c_path, contour, segmentation)
 
 
-def curve_map_for_mlp(path):
-    image = cv2.imread(path)
-    c_path = path.replace('images', 'mlp_features').split('.')[0]
-    if not os.path.exists(c_path):
-        grey, contour, area, length, segmentation = isolate_leaf(image)
-        if contour is not None and segmentation is not None:
-            fs = []
-            for h in [0, 4, 8]:
-                c = get_curvature_map(contour, segmentation, scale=(h * 3 + 10) / 300, length=128)
-                f = np.abs(np.fft.rfft(c, n=len(c)))
-                f = f / f.max()
-                fs.extend(f)
-            np.save(c_path, fs)
+# def curve_map_for_mlp(path):
+#     image = cv2.imread(path)
+#     c_path = path.replace('images', 'mlp_features').split('.')[0]
+#     if not os.path.exists(c_path):
+#         grey, contour, area, length, segmentation = isolate_leaf(image)
+#         if contour is not None and segmentation is not None:
+#             fs = []
+#             for h in [0, 4, 8]:
+#                 c = get_curvature_map(contour, segmentation, scale=(h * 3 + 10) / 300, length=128)
+#                 f = np.abs(np.fft.rfft(c, n=len(c)))
+#                 f = f / f.max()
+#                 fs.extend(f)
+#             np.save(c_path, fs)
 
 
-def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
+def extract(dataset, test, limit=-1, step=1, base=0, mode=0, show=False):
     count = 0
     skipped = 0
     if test:
@@ -262,13 +377,9 @@ def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
     else:
         envs = ['train']
     for env in envs:
-        for species_path in sorted(glob.glob('dataset/images/' + env + '/*')):
+        for species_path in sorted(glob.glob(dataset + '/images/' + env + '/*')):
             if mode == 0:
                 new_path = species_path.replace('images', 'features')
-                # TEMP
-                np2 = species_path.replace('images', 'cmaps_for_f')
-                if not os.path.exists(np2):
-                    os.makedirs(np2)
             elif mode == 1:
                 new_path = species_path.replace('images', 'curvature_maps')
             else:
@@ -279,15 +390,16 @@ def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
                 if step == 1 or (step > 1 and (i - base) % step == 0):
                     if mode == 0:
                         f_path = new_path + '/' + image_path.split('/')[-1].split('.')[0]
-                        features = get_features(image_path, show)
+                        features = get_features(dataset, image_path)
                         if features is not None:
                             np.save(f_path, features)
                         else:
                             skipped += 1
-                    elif mode == 1:
-                        get_curvature_maps(image_path)
+                    # elif mode == 1:
+                    #     get_curvature_maps(image_path)
                     else:
-                        curve_map_for_mlp(image_path)
+                        raise Exception('invalid mode')
+                    #     curve_map_for_mlp(image_path)
                     count += 1
                     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
                 if show or (limit > 0 and i >= limit):
@@ -296,10 +408,12 @@ def extract(test, limit=-1, step=1, base=0, mode=0, show=False):
 
 
 def main(argv):
-    if len(argv) == 2:
+    if len(argv) == 1:
         extract(mode=int(argv[0]))
+    elif len(argv) == 2:
+        extract(argv[0], (argv[1] == 'True'), show=True)
     else:
-        extract(test=(argv[0] == 'True'), limit=int(argv[1]), step=int(argv[2]), base=int(argv[3]), mode=int(argv[4]))
+        extract(argv[0], (argv[1] == 'True'), limit=int(argv[2]), step=int(argv[3]), base=int(argv[4]), mode=int(argv[5]))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import glob
 import subprocess
 import warnings
 import time
+import sys
 
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
@@ -11,20 +12,22 @@ from sklearn.model_selection import cross_validate
 from sklearn.svm import SVC, NuSVC
 from sklearn.externals import joblib
 from sklearn.decomposition import PCA
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 # from extract import extract
 # from preprocess import resize
 
+np.set_printoptions(threshold=np.nan)
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
 
-def load_features(test, limit=-1):
+def load_features(dataset, test, limit=-1):
     train_f = []
     train_l = []
     test_f = []
     test_l = []
     count = 0
-    for species_path in sorted(glob.glob('dataset/features/train/*')):
+    for species_path in sorted(glob.glob(dataset + '/features/train/*')):
         species = species_path.split('/')[-1]
         for i, f_path in enumerate(glob.glob(species_path + '/*')):
             features = np.load(f_path)
@@ -39,7 +42,7 @@ def load_features(test, limit=-1):
     print('Loaded:', count)
     if test:
         count = 0
-        for species_path in sorted(glob.glob('dataset/features/test/*')):
+        for species_path in sorted(glob.glob(dataset + '/features/test/*')):
             species = species_path.split('/')[-1]
             for i, f_path in enumerate(glob.glob(species_path + '/*')):
                 features = np.load(f_path)
@@ -63,38 +66,31 @@ def cv_eval(model, featureset, labelset, folds=5):
 def top_k_scores(model, predicted, labels, k):
     order = np.argsort(predicted, axis=1)
     n = model.classes_[order[:, -k:]]
-    predited_z = zip(labels, n)
     u_labels = np.unique(labels)
-    TP = 0.
-    FN = 0.
-    # FP = 0.
-    # TN = 0.
     r = 0.
     for L in u_labels:
-        for x, y in predited_z:
+        TP = 0.
+        FN = 0.
+        for i, x in enumerate(labels):
+            y = n[i]
             if x == L:
-                if L in y:
+                if x in y:
                     TP += 1
                 else:
                     FN += 1
-            # else:
-            #     if L in y:
-            #         FP += 1
-            #     else:
-            #         TN += 1
         if TP == 0:
             recall = 0
         else:
             recall = TP / (TP + FN)
         r += recall
     r /= len(u_labels)
-    return r  # p, r, 2*p*r/(p+r)
+    return r
 
 
-def classify(test, limit=-1, reduce=0, gamma=1, save=False):
+def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False):
     print('** CLASSIFYING **')
     print('-> loading data')
-    train_f, train_l, test_f, test_l = load_features(test, limit)
+    train_f, train_l, test_f, test_l = load_features(dataset, test, limit)
     if reduce > 0:
         print('-> reducing dimensionality')
         reduction = PCA(n_components=reduce)
@@ -116,19 +112,22 @@ def classify(test, limit=-1, reduce=0, gamma=1, save=False):
         clf.fit(train_f, train_l)
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
-        predicted = clf.predict_proba(test_f)
-        r1 = top_k_scores(clf, predicted, test_l, 1)
-        r3 = top_k_scores(clf, predicted, test_l, 3)
-        r5 = top_k_scores(clf, predicted, test_l, 5)
+        predicted_p = clf.predict_proba(test_f)
+        predicted = clf.predict(test_f)
+        r1 = top_k_scores(clf, predicted_p, test_l, 1)
+        r3 = top_k_scores(clf, predicted_p, test_l, 3)
+        r5 = top_k_scores(clf, predicted_p, test_l, 5)
+        print('ACC', accuracy_score(predicted, test_l))
+        # print(confusion_matrix(predicted, test_l))
         print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
 
-def extract(test=False, limit=-1):
+def extract(dataset, test=False, limit=-1):
     print('** EXTRACTING **')
-    p1 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '0', '0'])
-    p2 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '1', '0'])
-    p3 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '2', '0'])
-    p4 = subprocess.Popen(['python3', 'extract.py', str(test), str(limit), '4', '3', '0'])
+    p1 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '0', '0'])
+    p2 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '1', '0'])
+    p3 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '2', '0'])
+    p4 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '3', '0'])
     p1.wait()
     p2.wait()
     p3.wait()
@@ -136,9 +135,5 @@ def extract(test=False, limit=-1):
 
 
 if __name__ == '__main__':
-    # extract()
-    # best gamma = 4.1
-    # Precision:           0.766273217534
-    # Recall               0.756495503248
-    # F1                   0.756065998008
-    classify(test=False, limit=-1, reduce=64, gamma=4.1)
+    extract(sys.argv[1], test=(sys.argv[2] == 'True'))
+    classify(sys.argv[1], test=(sys.argv[2] == 'True'), limit=-1, reduce=0, gamma=4.1)  # TODO vary reduce + gamma
