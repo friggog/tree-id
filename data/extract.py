@@ -119,21 +119,30 @@ def f_curvature_stat(curvature_map):
     out.append(np.mean(np.abs(sd)))
 
     # ENTROPY
-    p = np.histogram(curvature_map, bins=128)  # TODO TUNE 128
+    p = np.histogram(curvature_map, bins=128, range=(0, 1))
     out.append(entropy(p[0]) / 10)
 
     # AUTOCORRELATION
     # TODO
     # acorr = autocorr(curvature_map)
-    # plt.plot(acorr[0::4])
+    # plt.plot(curvature_map)
     # plt.show()
+    # print(np.mean(curvature_map))
     # out.extend(acorr[0::4])
+
     # ZERO CROSSING
     # zcr = 0
-    # print(np.mean(curvature_map), np.median(curvature_map))
-    # for i in range(1, len(acorr)):
-    #     zcr += (acorr[i] * acorr[i - 1] < 0)
-    # zcr /= 50
+    # crossings = []
+    # mean = np.mean(curvature_map)
+    # for i in range(1, len(curvature_map)):
+    #     cross = (curvature_map[i] - mean) * (curvature_map[i - 1] - mean) < 0
+    #     zcr += cross
+    #     if cross:
+    #         crossings.append(i)
+    # zcr /= 100
+    # diffs = np.diff(crossings, n=1)
+    # print(zcr, np.mean(diffs))
+    # out.append(np.mean(diffs) / 20)
     # out.append(zcr)
 
     return out
@@ -194,21 +203,7 @@ def f_fft(cnt):
 # EXTRACTION #
 
 
-def isolate_leafsnap_leaf(path):
-    image = cv2.imread(path)
-    h, w = image.shape[:2]
-    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(grey, np.median(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    _, sat, vib = cv2.split(hsv)
-    _, sat = cv2.threshold(sat, 77, 255, cv2.THRESH_BINARY)
-    # if saturation is valid then add it to the threshold
-    if np.mean(sat) < 200:
-        thresh = np.add(sat, thresh)
-    # top hat it to remove stem, unless the leaf is very small
-    if np.mean(thresh) > 2:
-        thresh = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, np.ones((3, 3), np.uint8)))
-    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+def get_largest_contour(contours, h, w):
     curr = (None, 0, 0)
     for cnt in contours:
         a = cv2.contourArea(cnt)
@@ -225,13 +220,58 @@ def isolate_leafsnap_leaf(path):
         except Exception:
             continue
         dc = sqrt(pow(abs(w / 2 - cx), 2) + pow(abs(h / 2 - cy), 2))
-        if dc < (h * w / 750) and a > curr[1]:
+        if dc < sqrt(h**2 + w**2) / 3 and a > curr[1]:
             curr = (cnt, a, l)
     if curr[0] is None:
-        return None, None, None, None, None
-    # segment = np.zeros((h, w), np.uint8)
-    # cv2.drawContours(segment, [curr[0]], -1, color=(255, 255, 255), thickness=-1)
-    return grey, curr[0], curr[1], curr[2], thresh  # segment
+        return None, None, None
+    return curr
+
+
+def grad_image(im):
+    ddepth = cv2.CV_32F
+    dx = cv2.Sobel(im, ddepth, 1, 0)
+    dy = cv2.Sobel(im, ddepth, 0, 1)
+    dxabs = cv2.convertScaleAbs(dx)
+    dyabs = cv2.convertScaleAbs(dy)
+    mag = cv2.addWeighted(dxabs, 0.5, dyabs, 0.5, 0)
+    return mag
+
+
+def isolate_leafsnap_leaf(path):
+    image = cv2.imread(path)
+    h, w = image.shape[:2]
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, thresh_raw = cv2.threshold(grey, np.mean(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    _, sat, vib = cv2.split(hsv)
+    _, sat = cv2.threshold(sat, np.mean(sat) * 1.9, 255, cv2.THRESH_BINARY)
+    # if saturation is valid then add it to the threshold
+    if np.mean(sat) < 200:
+        thresh_raw = np.add(sat, thresh_raw)
+    # top hat it to remove stem, unless the leaf is very small
+    if np.mean(thresh_raw) > 5:
+        thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, np.ones((9, 9), np.uint8)))
+    else:
+        thresh = thresh_raw
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    _, contours_raw, _ = cv2.findContours(thresh_raw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = get_largest_contour(contours, h, w)
+    curr_r = get_largest_contour(contours_raw, h, w)
+    if curr[1] / curr_r[1] < 0.5:
+        out = curr_r
+    else:
+        out = curr
+    # cv2.drawContours(image, [curr_r[0]], -1, color=(0, 255, 0))
+    # cv2.drawContours(image, [out[0]], -1, color=(255, 0, 0))
+    # cv2.imshow('a', image)
+    # cv2.moveWindow('a', -600, -1000)
+    # cv2.imshow('b', thresh_raw)
+    # cv2.moveWindow('b', 200, -1000)
+    # cv2.imshow('c', sat)
+    # cv2.moveWindow('c', 1000, -1000)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    return grey, out[0], out[1], out[2], thresh_raw  # segment
 
 
 def isolate_foliage_leaf(path):
@@ -333,14 +373,17 @@ def get_features(dataset, path):
         return None
     f = []
     f.extend(f_basic_shape(contour, area, length))
-    # curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
+    curvatures = []  # np.load(path.replace('images', 'cmaps_for_f') +'.npy')
     scales = [0.01, 0.025, 0.05, 0.1, 0.15]  # TODO vary scales
     for h in scales:  # c in curvatures:
-        c = get_curvature_map(contour, segmentation, scale=h, length=128)  # TODO vary length (h*3+10)/300)
-        # curvatures.append(c)
+        c = get_curvature_map(contour, segmentation, scale=h, length=256)  # TODO vary length (h*3+10)/300)
+        curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
-    # np.save(path.replace('images', 'cmaps_for_f'), curvatures)
+    cmap_path = path.replace('images', 'cmaps')
+    if not os.path.exists(cmap_path):
+        os.makedirs(cmap_path)
+    np.save(cmap_path, curvatures)
     f = np.nan_to_num(f)  # to be safe
     return f
 
