@@ -257,10 +257,16 @@ def isolate_leafsnap_leaf(path):
     _, contours_raw, _ = cv2.findContours(thresh_raw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = get_largest_contour(contours, h, w)
     curr_r = get_largest_contour(contours_raw, h, w)
-    if curr[1] / curr_r[1] < 0.5:
-        out = curr_r
+    if curr[0] is None:
+        if curr_r[0] is None:
+            return None, None, None, None, None, None
+        else:
+            out = curr_r
     else:
-        out = curr
+        if curr[1] / curr_r[1] < 0.5:
+            out = curr_r
+        else:
+            out = curr
     # cv2.drawContours(image, [curr_r[0]], -1, color=(0, 255, 0))
     # cv2.drawContours(image, [out[0]], -1, color=(255, 0, 0))
     # cv2.imshow('a', image)
@@ -380,9 +386,10 @@ def get_features(dataset, path):
         curvatures.append(c)
         f.extend(f_fft(c))
         f.extend(f_curvature_stat(c / 255))
-    cmap_path = path.replace('images', 'cmaps')
-    if not os.path.exists(cmap_path):
-        os.makedirs(cmap_path)
+    cmap_path = path.replace('images', 'cmaps').split('.')[0]
+    cmap_folder = '/'.join(cmap_path.split('/')[:-1])
+    if not os.path.exists(cmap_folder):
+        os.makedirs(cmap_folder)
     np.save(cmap_path, curvatures)
     f = np.nan_to_num(f)  # to be safe
     return f
