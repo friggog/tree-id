@@ -244,11 +244,12 @@ def isolate_leafsnap_leaf(path):
     _, thresh_raw = cv2.threshold(grey, np.mean(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, vib = cv2.split(hsv)
-    _, sat = cv2.threshold(sat, np.mean(sat) * 1.9, 255, cv2.THRESH_BINARY)
+    _, sat = cv2.threshold(sat, np.mean(sat) * 2, 255, cv2.THRESH_BINARY)
     # if saturation is valid then add it to the threshold
-    if np.mean(sat) < 200:
+    if np.mean(sat) < 150 and np.mean(sat) > 30:
         thresh_raw = np.add(sat, thresh_raw)
     # top hat it to remove stem, unless the leaf is very small
+    thresh_raw = cv2.morphologyEx(thresh_raw, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     if np.mean(thresh_raw) > 5:
         thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, np.ones((9, 9), np.uint8)))
     else:
@@ -259,7 +260,7 @@ def isolate_leafsnap_leaf(path):
     curr_r = get_largest_contour(contours_raw, h, w)
     if curr[0] is None:
         if curr_r[0] is None:
-            return None, None, None, None, None, None
+            return None, None, None, None, None
         else:
             out = curr_r
     else:
@@ -273,10 +274,11 @@ def isolate_leafsnap_leaf(path):
     # cv2.moveWindow('a', -600, -1000)
     # cv2.imshow('b', thresh_raw)
     # cv2.moveWindow('b', 200, -1000)
-    # cv2.imshow('c', sat)
+    # cv2.imshow('c', thresh)
     # cv2.moveWindow('c', 1000, -1000)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
+    # return None, None, None, None, None
     return grey, out[0], out[1], out[2], thresh_raw  # segment
 
 
@@ -357,6 +359,7 @@ def isolate_leaves_leaf(path):
     if curr[0] is None:
         return None, None, None, None, None
     segment = cv2.imread(path, 0)
+    # TODO tophat it??
     return segment, curr[0], curr[1], curr[2], segment
 
 
@@ -452,7 +455,7 @@ def extract(dataset, test, limit=-1, step=1, base=0, mode=0, show=False):
                     #     curve_map_for_mlp(image_path)
                     count += 1
                     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
-                if show or (limit > 0 and i >= limit):
+                if (show and i > 10) or (limit > 0 and i >= limit):
                     break
     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
 

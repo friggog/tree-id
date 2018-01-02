@@ -67,7 +67,8 @@ def top_k_scores(model, predicted, labels, k):
     order = np.argsort(predicted, axis=1)
     n = model.classes_[order[:, -k:]]
     u_labels = np.unique(labels)
-    r = 0.
+    GTP = 0
+    GFN = 0
     for L in u_labels:
         TP = 0.
         FN = 0.
@@ -78,16 +79,14 @@ def top_k_scores(model, predicted, labels, k):
                     TP += 1
                 else:
                     FN += 1
-        if TP == 0:
-            recall = 0
-        else:
-            recall = TP / (TP + FN)
-        r += recall
-    r /= len(u_labels)
-    return r
+        GTP += TP
+        GFN += FN
+    if GTP == 0:
+        return 0
+    return GTP / (GTP + GFN)
 
 
-def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False):
+def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
     print('** CLASSIFYING **')
     print('-> loading data')
     train_f, train_l, test_f, test_l = load_features(dataset, test, limit)
@@ -100,23 +99,24 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False):
         if test:
             test_f = reduction.transform(test_f)
         print('Reduced to', reduce)
-    clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=False)
-    t = time.time()
-    print('-> fitting')
-    cv_eval(clf, train_f, train_l)
-    print('Fitted in', (time.time() - t))
+    clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
+    if cv:
+        t = time.time()
+        print('-> fitting')
+        cv_eval(clf, train_f, train_l)
+        print('Fitted in', (time.time() - t))
     if test:
         print('-> testing')
-        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=True)
+        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
         clf.fit(train_f, train_l)
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
-        predicted_p = clf.predict_proba(test_f)
-        predicted = clf.predict(test_f)
+        predicted_p = clf.decision_function(test_f)
+        # predicted = clf.predict(test_f)
         r1 = top_k_scores(clf, predicted_p, test_l, 1)
         r3 = top_k_scores(clf, predicted_p, test_l, 3)
         r5 = top_k_scores(clf, predicted_p, test_l, 5)
-        print('ACC', accuracy_score(predicted, test_l))
+        # print('ACC', accuracy_score(predicted, test_l))
         # print(confusion_matrix(predicted, test_l))
         print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
@@ -134,5 +134,5 @@ def extract(dataset, test=False, limit=-1):
 
 
 if __name__ == '__main__':
-    extract(sys.argv[1], test=(sys.argv[2] == 'True'))
-    classify(sys.argv[1], test=(sys.argv[2] == 'True'), limit=-1, reduce=0, gamma=4.1)  # TODO vary reduce + gamma
+    # extract(sys.argv[1], test=(sys.argv[2] == 'True'))
+    classify(sys.argv[1], test=(sys.argv[2] == 'True'), limit=-1, reduce=256, gamma=3.9, cv=True)  # TODO vary reduce + gamma
