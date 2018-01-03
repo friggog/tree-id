@@ -217,7 +217,7 @@ def split(dataset, n):
     train_paths = []
     test_paths = []
     test_counts = {}
-    for env in ['all']:  # 'field', 'lab']:
+    for env in ['field', 'lab']:
         for species_path in sorted(glob.glob(dataset +'/images/' + env + '/*')):
             species = species_path.split('/')[-1]
             test_path = species_path.replace('/' + env + '/', '/test/')

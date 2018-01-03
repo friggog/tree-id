@@ -7,9 +7,19 @@ from math import floor, sqrt
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 np.seterr(divide='ignore', invalid='ignore')
+
+
+def circle_kernel(rad):
+    k = np.zeros((rad * 2 + 1, rad * 2 + 1), np.uint8)
+    cv2.circle(k, (rad, rad), rad, (1, 1, 1), -1)
+    return k
+
+
+def square_kernel(rad):
+    return np.ones((rad, rad), np.uint8)
 
 
 def get_curvature_map(line, segment, scale=0.1, length=128):
@@ -195,7 +205,7 @@ def f_fft(cnt):
     # e = entropy(p)
     #
     x /= x.max()
-    out = x.tolist()  # TODO test this
+    out = x.tolist()
     out.append(c)
     # out.append(e)
     return out
@@ -220,7 +230,7 @@ def get_largest_contour(contours, h, w):
         except Exception:
             continue
         dc = sqrt(pow(abs(w / 2 - cx), 2) + pow(abs(h / 2 - cy), 2))
-        if dc < sqrt(h**2 + w**2) / 3 and a > curr[1]:
+        if dc < sqrt(h**2 + w**2) / 4 and a > curr[1]:
             curr = (cnt, a, l)
     if curr[0] is None:
         return None, None, None
@@ -240,46 +250,49 @@ def grad_image(im):
 def isolate_leafsnap_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
+
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh_raw = cv2.threshold(grey, np.mean(grey) * 0.6, 255, cv2.THRESH_BINARY_INV)
+    gt = max(np.min([np.mean(grey[:, 0]), np.mean(grey[:, -1]), np.mean(grey[0, :]), np.mean(grey[-1, :])]), 90)
+    _, thresh_raw = cv2.threshold(grey, gt * 0.6, 255, cv2.THRESH_BINARY_INV)
+    thresh_raw = cv2.morphologyEx(thresh_raw, cv2.MORPH_CLOSE, circle_kernel(5))
+
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    _, sat, vib = cv2.split(hsv)
-    _, sat = cv2.threshold(sat, np.mean(sat) * 2, 255, cv2.THRESH_BINARY)
+    _, sat, _ = cv2.split(hsv)
+    st = np.max([np.mean(sat[:, 0]), np.mean(sat[:, -1]), np.mean(sat[0, :]), np.mean(sat[-1, :])])
+    _, sat = cv2.threshold(sat, st + 45, 255, cv2.THRESH_BINARY)  # 115
+    sat = cv2.morphologyEx(sat, cv2.MORPH_CLOSE, circle_kernel(5))
     # if saturation is valid then add it to the threshold
-    if np.mean(sat) < 150 and np.mean(sat) > 30:
+    if np.mean(sat) < 200:
         thresh_raw = np.add(sat, thresh_raw)
+
+    thresh = thresh_raw.copy()
     # top hat it to remove stem, unless the leaf is very small
-    thresh_raw = cv2.morphologyEx(thresh_raw, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
-    if np.mean(thresh_raw) > 5:
-        thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, np.ones((9, 9), np.uint8)))
-    else:
-        thresh = thresh_raw
+    a = np.sum(thresh)
+    thresh_th = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, square_kernel(11)))
+    b = np.sum(thresh_th)
+    if b > 0.9 * a:
+        thresh = thresh_th
+
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    _, contours_raw, _ = cv2.findContours(thresh_raw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = get_largest_contour(contours, h, w)
-    curr_r = get_largest_contour(contours_raw, h, w)
-    if curr[0] is None:
-        if curr_r[0] is None:
-            return None, None, None, None, None
-        else:
-            out = curr_r
-    else:
-        if curr[1] / curr_r[1] < 0.5:
-            out = curr_r
-        else:
-            out = curr
-    # cv2.drawContours(image, [curr_r[0]], -1, color=(0, 255, 0))
-    # cv2.drawContours(image, [out[0]], -1, color=(255, 0, 0))
-    # cv2.imshow('a', image)
-    # cv2.moveWindow('a', -600, -1000)
-    # cv2.imshow('b', thresh_raw)
-    # cv2.moveWindow('b', 200, -1000)
-    # cv2.imshow('c', thresh)
-    # cv2.moveWindow('c', 1000, -1000)
+
+    # title = path.split('/')[3]
+    # if curr[0] is not None:
+    #     cv2.drawContours(image, [curr[0]], -1, color=(0, 0, 255))
+    # cv2.imshow(title + '_a', image)
+    # cv2.moveWindow(title + '_a', -300, -1000)
+    # cv2.imshow(title + '_b', thresh)
+    # cv2.moveWindow(title + '_b', 300, -1000)
+    # cv2.imshow(title + '_c', thresh_raw)
+    # cv2.moveWindow(title + '_c', 900, -1000)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
     # return None, None, None, None, None
-    return grey, out[0], out[1], out[2], thresh_raw  # segment
+
+    if curr[0] is None:
+        print('SKIPPED', path)
+        return None, None, None, None, None
+    return grey, curr[0], curr[1], curr[2], thresh
 
 
 def isolate_foliage_leaf(path):
@@ -308,7 +321,7 @@ def isolate_swedish_leaf(path):
     image = cv2.resize(image, (int(s * w), int(s * h)))
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh_raw = cv2.threshold(grey, 200, 255, cv2.THRESH_BINARY_INV)
-    thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, np.ones((15, 15), np.uint8)))
+    thresh = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, square_kernel(15)))
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = (None, 0, 0)
     for cnt in contours:
@@ -360,14 +373,18 @@ def isolate_leaves_leaf(path):
         return None, None, None, None, None
     segment = cv2.imread(path, 0)
     # TODO tophat it??
-    return segment, curr[0], curr[1], curr[2], segment
+    # cv2.drawContours(grey, [curr[0]], -1, color=(0, 0, 255))
+    # cv2.imshow('a', grey)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    return grey, curr[0], curr[1], curr[2], segment
 
 
 def get_features(dataset, path):
     # c_map = cv2.imread(path.replace('images', 'curvature_maps'), 0)
     if dataset == 'foliage':
         isolate_leaf = isolate_foliage_leaf
-    elif dataset == 'leaves':
+    elif dataset in ['leaves', 'leafsnap-s']:
         isolate_leaf = isolate_leaves_leaf
     elif dataset == 'swedish':
         isolate_leaf = isolate_swedish_leaf
@@ -455,7 +472,7 @@ def extract(dataset, test, limit=-1, step=1, base=0, mode=0, show=False):
                     #     curve_map_for_mlp(image_path)
                     count += 1
                     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
-                if (show and i > 10) or (limit > 0 and i >= limit):
+                if (show and i > 3) or (limit > 0 and i >= limit):
                     break
     print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
 
@@ -464,9 +481,9 @@ def main(argv):
     if len(argv) == 1:
         extract(mode=int(argv[0]))
     elif len(argv) == 2:
-        extract(argv[0], (argv[1] == 'True'), show=True)
+        extract(argv[0], (argv[1].lower() == 'true'), show=True)
     else:
-        extract(argv[0], (argv[1] == 'True'), limit=int(argv[2]), step=int(argv[3]), base=int(argv[4]), mode=int(argv[5]))
+        extract(argv[0], (argv[1].lower() == 'true'), limit=int(argv[2]), step=int(argv[3]), base=int(argv[4]), mode=int(argv[5]))
 
 
 if __name__ == "__main__":
