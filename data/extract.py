@@ -251,27 +251,41 @@ def isolate_leafsnap_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
 
+    # Z = image.reshape((-1, 3))
+    # Z = np.float32(Z)
+    # criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    # K = 5
+    # ret, label, center = cv2.kmeans(Z, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+    # center = np.uint8(center)
+    # res = center[label.flatten()]
+    # res2 = res.reshape((image.shape))
+    # cv2.imshow('a', res2)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # return None, None, None, None, None
+
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gt = max(np.min([np.mean(grey[:, 0]), np.mean(grey[:, -1]), np.mean(grey[0, :]), np.mean(grey[-1, :])]), 90)
     _, thresh_raw = cv2.threshold(grey, gt * 0.6, 255, cv2.THRESH_BINARY_INV)
-    thresh_raw = cv2.morphologyEx(thresh_raw, cv2.MORPH_CLOSE, circle_kernel(5))
+    thresh_raw = cv2.morphologyEx(thresh_raw, cv2.MORPH_CLOSE, circle_kernel(5))  # TODO is this removing edge detail?
 
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     _, sat, _ = cv2.split(hsv)
     st = np.max([np.mean(sat[:, 0]), np.mean(sat[:, -1]), np.mean(sat[0, :]), np.mean(sat[-1, :])])
     _, sat = cv2.threshold(sat, st + 45, 255, cv2.THRESH_BINARY)  # 115
-    sat = cv2.morphologyEx(sat, cv2.MORPH_CLOSE, circle_kernel(5))
+    sat = cv2.morphologyEx(sat, cv2.MORPH_CLOSE, circle_kernel(5))  # TODO is this removing edge detail?
     # if saturation is valid then add it to the threshold
     if np.mean(sat) < 200:
         thresh_raw = np.add(sat, thresh_raw)
 
-    thresh = thresh_raw.copy()
     # top hat it to remove stem, unless the leaf is very small
-    a = np.sum(thresh)
-    thresh_th = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, square_kernel(11)))
+    a = np.sum(thresh_raw)
+    thresh_th = cv2.subtract(thresh_raw, cv2.morphologyEx(thresh_raw, cv2.MORPH_TOPHAT, square_kernel(11)))
     b = np.sum(thresh_th)
     if b > 0.9 * a:
         thresh = thresh_th
+    else:
+        thresh = thresh_raw
 
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = get_largest_contour(contours, h, w)
@@ -290,9 +304,9 @@ def isolate_leafsnap_leaf(path):
     # return None, None, None, None, None
 
     if curr[0] is None:
-        print('SKIPPED', path)
+        # print('SKIPPED', path)
         return None, None, None, None, None
-    return grey, curr[0], curr[1], curr[2], thresh
+    return grey, curr[0], curr[1], curr[2], thresh_raw  # TODO try this vs not raw
 
 
 def isolate_foliage_leaf(path):
@@ -359,7 +373,8 @@ def isolate_flavia_leaf(path):
 
 def isolate_leaves_leaf(path):
     grey = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    _, thresh = cv2.threshold(grey, 250, 255, cv2.THRESH_BINARY)
+    _, thresh = cv2.threshold(grey, 240, 255, cv2.THRESH_BINARY)
+    thresh = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, square_kernel(11)))
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = (None, 0, 0)
     for cnt in contours:
@@ -372,11 +387,6 @@ def isolate_leaves_leaf(path):
     if curr[0] is None:
         return None, None, None, None, None
     segment = cv2.imread(path, 0)
-    # TODO tophat it??
-    # cv2.drawContours(grey, [curr[0]], -1, color=(0, 0, 255))
-    # cv2.imshow('a', grey)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
     return grey, curr[0], curr[1], curr[2], segment
 
 
@@ -388,7 +398,7 @@ def get_features(dataset, path):
         isolate_leaf = isolate_leaves_leaf
     elif dataset == 'swedish':
         isolate_leaf = isolate_swedish_leaf
-    elif dataset == 'leafsnap':
+    elif dataset in ['leafsnap', 'leafsnap-lab', 'leafsnap-field']:
         isolate_leaf = isolate_leafsnap_leaf
     elif dataset == 'flavia':
         isolate_leaf = isolate_flavia_leaf
@@ -440,13 +450,13 @@ def get_features(dataset, path):
 
 
 def extract(dataset, test, limit=-1, step=1, base=0, mode=0, show=False):
-    count = 0
-    skipped = 0
     if test:
         envs = ['train', 'test']
     else:
         envs = ['train']
     for env in envs:
+        count = 0
+        skipped = 0
         for species_path in sorted(glob.glob(dataset + '/images/' + env + '/*')):
             if mode == 0:
                 new_path = species_path.replace('images', 'features')
@@ -471,10 +481,10 @@ def extract(dataset, test, limit=-1, step=1, base=0, mode=0, show=False):
                         raise Exception('invalid mode')
                     #     curve_map_for_mlp(image_path)
                     count += 1
-                    print('Done:', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
+                    print('Done ' + env + ':', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
                 if (show and i > 3) or (limit > 0 and i >= limit):
                     break
-    print('Done:', str(count).rjust(6), '(' + str(skipped) + ')')
+        print('Done ' + env + ':', str(count).rjust(6), '(' + str(skipped) + ')')
 
 
 def main(argv):

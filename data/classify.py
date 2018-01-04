@@ -36,10 +36,10 @@ def load_features(dataset, test, limit=-1):
                     train_f.append(features)
                     train_l.append(species)
                     count += 1
-                    print('Loaded:', count, end='\r')
+                    print('Loaded:', count, '(train)', end='\r')
             if (limit > 0 and i >= limit):
                 break
-    print('Loaded:', count)
+    print('Loaded:', count, '(train)')
     if test:
         count = 0
         for species_path in sorted(glob.glob(dataset + '/features/test/*')):
@@ -51,8 +51,8 @@ def load_features(dataset, test, limit=-1):
                         test_f.append(features)
                         test_l.append(species)
                         count += 1
-                        print('Loaded:', count, end='\r')
-        print('Loaded:', count)
+                        print('Loaded:', count, '(test)', end='\r')
+        print('Loaded:', count, '(test)')
     return train_f, train_l, test_f, test_l
 
 
@@ -99,24 +99,26 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
         if test:
             test_f = reduction.transform(test_f)
         print('Reduced to', reduce)
-    clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
     if cv:
+        print('-> cross-validating')
+        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
         t = time.time()
-        print('-> fitting')
         cv_eval(clf, train_f, train_l)
         print('Fitted in', (time.time() - t))
     if test:
         print('-> testing')
         clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
+        t = time.time()
         clf.fit(train_f, train_l)
+        print('Fitted in', (time.time() - t))
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
         predicted_p = clf.decision_function(test_f)
-        # predicted = clf.predict(test_f)
+        predicted = clf.predict(test_f)
         r1 = top_k_scores(clf, predicted_p, test_l, 1)
         r3 = top_k_scores(clf, predicted_p, test_l, 3)
         r5 = top_k_scores(clf, predicted_p, test_l, 5)
-        # print('ACC', accuracy_score(predicted, test_l))
+        print('ACC', accuracy_score(predicted, test_l))
         # print(confusion_matrix(predicted, test_l))
         print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
@@ -134,5 +136,6 @@ def extract(dataset, test=False, limit=-1):
 
 
 if __name__ == '__main__':
-    extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'))
-    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=256, gamma=3.9, cv=True)  # TODO vary reduce + gamma
+    if sys.argv[3].lower() == 'true':
+        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'))
+    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=256, gamma=3.9, cv=True)

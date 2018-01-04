@@ -217,7 +217,12 @@ def split(dataset, n):
     train_paths = []
     test_paths = []
     test_counts = {}
-    for env in ['field', 'lab']:
+    if dataset == 'leafsnap':
+        envs = ['field', 'lab']
+    else:
+        envs = ['all']
+    for env in envs:
+        print('\n', env)
         for species_path in sorted(glob.glob(dataset +'/images/' + env + '/*')):
             species = species_path.split('/')[-1]
             test_path = species_path.replace('/' + env + '/', '/test/')
@@ -227,6 +232,7 @@ def split(dataset, n):
             if not os.path.exists(train_path):
                 os.makedirs(train_path)
             paths = glob.glob(species_path + '/*')
+            print(species.ljust(30), str(len(paths)).rjust(4))
             if species not in test_counts:
                 test_counts[species] = 0
             for i, path in enumerate(paths):
