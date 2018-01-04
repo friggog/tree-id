@@ -5,7 +5,7 @@ import os
 import sys
 from math import ceil, floor, sqrt
 from shutil import copyfile
-
+import random
 import cv2
 import numpy as np
 
@@ -213,7 +213,7 @@ def segment(env, show=False):
             cv2.imwrite(new_img_path, segmentation)
 
 
-def split(dataset, n):
+def split(dataset, n, shuffle=False):
     train_paths = []
     test_paths = []
     test_counts = {}
@@ -235,6 +235,8 @@ def split(dataset, n):
             print(species.ljust(30), str(len(paths)).rjust(4))
             if species not in test_counts:
                 test_counts[species] = 0
+            if shuffle:
+                random.shuffle(paths)
             for i, path in enumerate(paths):
                 if test_counts[species] < n:
                     test_paths.append((path, path.replace('/' + env + '/', '/test/')))
@@ -250,7 +252,7 @@ def split(dataset, n):
 
 
 def main(argv):
-    split(argv[0], int(argv[1]))
+    split(argv[0], int(argv[1]), argv[2].lower() == 'true')
 
 
 if __name__ == "__main__":

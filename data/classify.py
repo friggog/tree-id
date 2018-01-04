@@ -138,4 +138,4 @@ def extract(dataset, test=False, limit=-1):
 if __name__ == '__main__':
     if sys.argv[3].lower() == 'true':
         extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'))
-    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=256, gamma=3.9, cv=True)
+    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=256, gamma=4.0, cv=True)

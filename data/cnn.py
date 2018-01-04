@@ -2,14 +2,45 @@
 
 import functools
 import os
+import numpy as np
 
 from keras.layers import (Conv2D, Dense, Dropout, Flatten, MaxPooling2D, BatchNormalization, Activation, GaussianDropout)
 from keras.models import Sequential
 from keras.preprocessing.image import ImageDataGenerator
 from keras.metrics import top_k_categorical_accuracy
 from keras.callbacks import ModelCheckpoint
+from keras import applications
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+top3_acc = functools.partial(top_k_categorical_accuracy, k=3)
+top3_acc.__name__ = 'top3_acc'
+top5_acc = functools.partial(top_k_categorical_accuracy, k=5)
+top5_acc.__name__ = 'top5_acc'
+
+
+def preprocess_input_vgg(x):
+    """Wrapper around keras.applications.vgg16.preprocess_input()
+    to make it compatible for use with keras.preprocessing.image.ImageDataGenerator's
+    `preprocessing_function` argument.
+
+    Parameters
+    ----------
+    x : a numpy 3darray (a single image to be preprocessed)
+
+    Note we cannot pass keras.applications.vgg16.preprocess_input()
+    directly to to keras.preprocessing.image.ImageDataGenerator's
+    `preprocessing_function` argument because the former expects a
+    4D tensor whereas the latter expects a 3D tensor. Hence the
+    existence of this wrapper.
+
+    Returns a numpy 3darray (the preprocessed image).
+
+    """
+    from keras.applications.vgg16 import preprocess_input
+    X = np.expand_dims(x, axis=0)
+    X = preprocess_input(X)
+    return X[0]
 
 
 BATCH_SIZE = 48
@@ -22,28 +53,32 @@ DROP = [0, 0.5]
 
 datagen = ImageDataGenerator(
     rotation_range=360,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    rescale=1. / 255,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    preprocessing_function=preprocess_input_vgg,
+    # rescale=1. / 255,
     horizontal_flip=True,
     vertical_flip=True,
     shear_range=0,
     zoom_range=0.2,
-    fill_mode='nearest')
+    fill_mode='nearest',)
 
 
 generator = datagen.flow_from_directory(
     'leafsnap/images/train_r',
-    target_size=(256, 256),
+    target_size=(244, 244),
     batch_size=BATCH_SIZE,
     color_mode='grayscale',
-    class_mode='categorical')
+    class_mode='categorical',
+    save_to_dir='prev',
+    save_format='jpeg')
 
 vdatagen = ImageDataGenerator(
     rotation_range=0,
     width_shift_range=0,
     height_shift_range=0,
-    rescale=1. / 255,
+    preprocessing_function=preprocess_input_vgg,
+    # rescale=1. / 255,
     horizontal_flip=False,
     vertical_flip=False,
     shear_range=0,
@@ -52,74 +87,20 @@ vdatagen = ImageDataGenerator(
 
 validator = vdatagen.flow_from_directory(
     'leafsnap/images/test_r',
-    target_size=(256, 256),
+    target_size=(244, 244),
     batch_size=BATCH_SIZE,
     color_mode='grayscale',
     class_mode='categorical')
 
-model = Sequential()
-model.add(Conv2D(WIDTHS[0], (KERNELS[0], KERNELS[0]), input_shape=(256, 256, 1), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Conv2D(WIDTHS[0], (KERNELS[0], KERNELS[0]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(GaussianDropout(DROP[0]))
 
-model.add(Conv2D(WIDTHS[1], (KERNELS[1], KERNELS[1]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Conv2D(WIDTHS[1], (KERNELS[1], KERNELS[1]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(GaussianDropout(DROP[0]))
-
-model.add(Conv2D(WIDTHS[2], (KERNELS[2], KERNELS[2]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Conv2D(WIDTHS[2], (KERNELS[2], KERNELS[2]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(GaussianDropout(DROP[0]))
-
-model.add(Conv2D(WIDTHS[3], (KERNELS[3], KERNELS[3]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Conv2D(WIDTHS[3], (KERNELS[3], KERNELS[3]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(GaussianDropout(DROP[0]))
-
-model.add(Conv2D(WIDTHS[4], (KERNELS[4], KERNELS[4]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Conv2D(WIDTHS[4], (KERNELS[4], KERNELS[4]), padding='same'))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(GaussianDropout(DROP[0]))
-
-model.add(Flatten())
-model.add(Dense(WIDTHS[-1]))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Dropout(DROP[1]))
-
-model.add(Dense(WIDTHS[-1]))
-# model.add(BatchNormalization())
-model.add(Activation('relu'))
-model.add(Dropout(DROP[1]))
-
+model = applications.VGG16(weights='imagenet', include_top=False)
+model.add(Flatten(input_shape=model.output_shape[1:]))
+model.add(Dense(1024, activation='relu'))
+model.add(Dropout(0.5))
 model.add(Dense(184, activation='softmax'))
 
-top3_acc = functools.partial(top_k_categorical_accuracy, k=3)
-top3_acc.__name__ = 'top3_acc'
-top5_acc = functools.partial(top_k_categorical_accuracy, k=5)
-top5_acc.__name__ = 'top5_acc'
+for layer in model.layers[:25]:
+    layer.trainable = False
 
 model.compile(loss='categorical_crossentropy',
               optimizer='adam',

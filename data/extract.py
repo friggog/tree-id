@@ -247,6 +247,38 @@ def grad_image(im):
     return mag
 
 
+def isolate_folio_leaf(path):
+    image = cv2.imread(path)
+    h, w = image.shape[:2]
+    s = 1000 / max(h, w)
+    image = cv2.resize(image, (int(s * w), int(s * h)))
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gt = max(np.min([np.mean(grey[:, 0]), np.mean(grey[:, -1]), np.mean(grey[0, :]), np.mean(grey[-1, :])]), 90)
+    _, thresh = cv2.threshold(grey, gt * 0.6, 255, cv2.THRESH_BINARY_INV)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, circle_kernel(9))
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    _, sat, _ = cv2.split(hsv)
+    st = np.max([np.mean(sat[:, 0]), np.mean(sat[:, -1]), np.mean(sat[0, :]), np.mean(sat[-1, :])])
+    _, sat = cv2.threshold(sat, st + 35, 255, cv2.THRESH_BINARY)
+    sat = cv2.morphologyEx(sat, cv2.MORPH_CLOSE, circle_kernel(7))
+    # if saturation is valid then add it to the threshold
+    if np.mean(sat) < 200:
+        thresh = np.add(sat, thresh)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    curr = (None, 0, 0)
+    for cnt in contours:
+        a = cv2.contourArea(cnt)
+        l = cv2.arcLength(cnt, False)
+        if l < 30:
+            continue
+        if a > curr[1]:
+            curr = (cnt, a, l)
+    if curr[0] is None:
+        # print('SKIPPED', path)
+        return None, None, None, None, None
+    return grey, curr[0], curr[1], curr[2], thresh  # TODO try this vs not raw
+
+
 def isolate_leafsnap_leaf(path):
     image = cv2.imread(path)
     h, w = image.shape[:2]
@@ -402,6 +434,8 @@ def get_features(dataset, path):
         isolate_leaf = isolate_leafsnap_leaf
     elif dataset == 'flavia':
         isolate_leaf = isolate_flavia_leaf
+    elif dataset == 'folio':
+        isolate_leaf = isolate_folio_leaf
     else:
         raise Exception('invalid dataset')
     grey, contour, area, length, segmentation = isolate_leaf(path)
