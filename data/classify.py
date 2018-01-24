@@ -119,13 +119,13 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
         predicted = clf.predict(test_f)
-        predicted_p = clf.predict_proba(test_f)
-        rs = []
-        for r in range(10):
-            rk = top_k_scores(clf.classes_, predicted_p, test_l, r + 1)
-            rs.append((r +1, rk))
-        for r, rk in rs:
-            print('(' +str(r) +', ' +str(rk) +') ', end='')
+        # predicted_p = clf.predict_proba(test_f)
+        # rs = []
+        # for r in range(10):
+        #     rk = top_k_scores(clf.classes_, predicted_p, test_l, r + 1)
+        #     rs.append((r +1, rk))
+        # for r, rk in rs:
+        #     print('(' +str(r) +', ' +str(rk) +') ', end='')
         print('')
         print('REC', recall_score(test_l, predicted, average='macro'))
         print('PRE', precision_score(test_l, predicted, average='macro'))

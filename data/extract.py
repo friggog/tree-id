@@ -433,7 +433,7 @@ def isolate_shapecn_leaf(path):
 def get_features(dataset, path, use_cmap=False):
     if dataset == 'foliage':
         isolate_leaf = isolate_foliage_leaf
-    elif dataset in ['leaves', 'leafsnap-s', 'fish']:
+    elif dataset in ['leaves', 'leafsnap-s', 'fish', 'mpeg']:
         isolate_leaf = isolate_leaves_leaf
     elif 'shapecn' in dataset:
         isolate_leaf= isolate_shapecn_leaf
