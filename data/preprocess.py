@@ -74,17 +74,25 @@ def delete_dupes():
             os.remove(image_path)
 
 
-def print_count(t):
+def print_count(dataset, t):
     print('\n', t.upper())
     print('-' * 45)
     count = 0
-    for species_path in sorted(glob.glob('dataset/images/' + t + '/*')):
+    min = 999
+    max = 0
+    for species_path in sorted(glob.glob(dataset + '/images/' + t + '/*')):
         species = species_path.split('/')[-1]
         n = len(glob.glob(species_path + '/*'))
         count += n
+        if n < min:
+            min = n
+        if n > max:
+            max = n
         print((species + ': ').ljust(40), str(n).rjust(4))
     print('-' * 45)
     print('Total: '.ljust(35), str(count).rjust(9))
+    print('Min: '.ljust(35), str(min).rjust(9))
+    print('Max: '.ljust(35), str(max).rjust(9))
 
 
 def resize(env, limit=-1, step=1, base=0, show=False):
@@ -213,7 +221,7 @@ def segment(env, show=False):
             cv2.imwrite(new_img_path, segmentation)
 
 
-def split(dataset, n, shuffle=False):
+def split(dataset, n, shuffle=False, m='images'):
     train_paths = []
     test_paths = []
     test_counts = {}
@@ -223,7 +231,7 @@ def split(dataset, n, shuffle=False):
         envs = ['all']
     for env in envs:
         print('\n', env)
-        for species_path in sorted(glob.glob(dataset +'/images/' + env + '/*')):
+        for species_path in sorted(glob.glob(dataset +'/' + m + '/' + env + '/*')):
             species = species_path.split('/')[-1]
             test_path = species_path.replace('/' + env + '/', '/test/')
             if not os.path.exists(test_path):
@@ -231,7 +239,7 @@ def split(dataset, n, shuffle=False):
             train_path = species_path.replace('/' + env + '/', '/train/')
             if not os.path.exists(train_path):
                 os.makedirs(train_path)
-            paths = glob.glob(species_path + '/*')
+            paths = sorted(glob.glob(species_path + '/*'))
             print(species.ljust(30), str(len(paths)).rjust(4))
             if species not in test_counts:
                 test_counts[species] = 0
@@ -252,7 +260,10 @@ def split(dataset, n, shuffle=False):
 
 
 def main(argv):
-    split(argv[0], int(argv[1]), argv[2].lower() == 'true')
+    if len(argv) == 4:
+        split(argv[0], int(argv[1]), argv[2].lower() == 'true', m=argv[3])
+    else:
+        print_count(argv[0], argv[1])
 
 
 if __name__ == "__main__":

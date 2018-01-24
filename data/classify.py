@@ -5,6 +5,7 @@ import subprocess
 import warnings
 import time
 import sys
+import os
 
 import numpy as np
 from sklearn.exceptions import UndefinedMetricWarning
@@ -12,10 +13,9 @@ from sklearn.model_selection import cross_validate
 from sklearn.svm import SVC
 from sklearn.externals import joblib
 from sklearn.decomposition import PCA
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
 
-# from extract import extract
-# from preprocess import resize
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 np.set_printoptions(threshold=np.nan)
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
@@ -53,19 +53,23 @@ def load_features(dataset, test, limit=-1):
                         count += 1
                         print('Loaded:', count, '(test)', end='\r')
         print('Loaded:', count, '(test)')
+    if 'shapecn' in dataset:
+        print('Removing higher fidelity features due to image size')
+        train_f = np.delete(train_f, np.s_[4:143 * 2 + 4], axis=1)
+        test_f = np.delete(test_f, np.s_[4:143 * 2 + 4], axis=1)
     return train_f, train_l, test_f, test_l
 
 
 def cv_eval(model, featureset, labelset, folds=5):
     scores = cross_validate(model, featureset, labelset, cv=folds, scoring=['precision_macro', 'recall_macro', 'f1_macro'], return_train_score=False)
-    print('Precision:'.ljust(20), np.mean(scores['test_precision_macro']))
-    print('Recall'.ljust(20), np.mean(scores['test_recall_macro']))
-    print('F1'.ljust(20), np.mean(scores['test_f1_macro']))
+    print('REC', np.mean(scores['test_recall_macro']))
+    print('PRE:', np.mean(scores['test_precision_macro']))
+    print('F1S', np.mean(scores['test_f1_macro']))
 
 
-def top_k_scores(model, predicted, labels, k):
+def top_k_scores(classes, predicted, labels, k):
     order = np.argsort(predicted, axis=1)
-    n = model.classes_[order[:, -k:]]
+    n =classes[order[:, -k:]]
     u_labels = np.unique(labels)
     GTP = 0
     GFN = 0
@@ -88,6 +92,7 @@ def top_k_scores(model, predicted, labels, k):
 
 def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
     print('** CLASSIFYING **')
+    print('** ' + dataset.upper() + ' **')
     print('-> loading data')
     train_f, train_l, test_f, test_l = load_features(dataset, test, limit)
     if reduce > 0:
@@ -107,28 +112,33 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
         print('Fitted in', (time.time() - t))
     if test:
         print('-> testing')
-        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
+        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=True)
         t = time.time()
         clf.fit(train_f, train_l)
         print('Fitted in', (time.time() - t))
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
-        predicted_p = clf.decision_function(test_f)
         predicted = clf.predict(test_f)
-        r1 = top_k_scores(clf, predicted_p, test_l, 1)
-        r3 = top_k_scores(clf, predicted_p, test_l, 3)
-        r5 = top_k_scores(clf, predicted_p, test_l, 5)
-        print('ACC', accuracy_score(predicted, test_l))
+        predicted_p = clf.predict_proba(test_f)
+        rs = []
+        for r in range(10):
+            rk = top_k_scores(clf.classes_, predicted_p, test_l, r + 1)
+            rs.append((r +1, rk))
+        for r, rk in rs:
+            print('(' +str(r) +', ' +str(rk) +') ', end='')
+        print('')
+        print('REC', recall_score(test_l, predicted, average='macro'))
+        print('PRE', precision_score(test_l, predicted, average='macro'))
+        print('F1S', f1_score(test_l, predicted, average='macro'))
         # print(confusion_matrix(predicted, test_l))
-        print('Recall'.ljust(20), str(r1).ljust(20), str(r3).ljust(20), r5)
 
 
-def extract(dataset, test=False, limit=-1):
+def extract(dataset, test=False, cmap=False, limit=-1):
     print('** EXTRACTING **')
-    p1 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '0', '0'])
-    p2 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '1', '0'])
-    p3 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '2', '0'])
-    p4 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '3', '0'])
+    p1 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '0', str(cmap)])
+    p2 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '1', str(cmap)])
+    p3 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '2', str(cmap)])
+    p4 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '3', str(cmap)])
     p1.wait()
     p2.wait()
     p3.wait()
@@ -136,6 +146,9 @@ def extract(dataset, test=False, limit=-1):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        print('classify.py dataset test? [extract? use_cmaps?]')
+        exit()
     if sys.argv[3].lower() == 'true':
-        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'))
-    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=256, gamma=4.0, cv=True)
+        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'), cmap=sys.argv[4].lower() == 'true', limit=10)
+    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=128, gamma=4, cv=(not (sys.argv[2].lower() == 'true')))

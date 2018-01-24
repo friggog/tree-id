@@ -4,8 +4,8 @@ import functools
 import os
 import numpy as np
 
-from keras.layers import (Conv2D, Dense, Dropout, Flatten, MaxPooling2D, BatchNormalization, Activation, GaussianDropout)
-from keras.models import Sequential
+from keras.layers import (Conv2D, Dense, Dropout, Flatten, MaxPooling2D, BatchNormalization, Activation, GaussianDropout, GlobalAveragePooling2D)
+from keras.models import Sequential, Model
 from keras.preprocessing.image import ImageDataGenerator
 from keras.metrics import top_k_categorical_accuracy
 from keras.callbacks import ModelCheckpoint
@@ -55,8 +55,8 @@ datagen = ImageDataGenerator(
     rotation_range=360,
     width_shift_range=0.1,
     height_shift_range=0.1,
-    preprocessing_function=preprocess_input_vgg,
-    # rescale=1. / 255,
+    # preprocessing_function=preprocess_input_vgg,
+    rescale=1. / 255,
     horizontal_flip=True,
     vertical_flip=True,
     shear_range=0,
@@ -66,19 +66,17 @@ datagen = ImageDataGenerator(
 
 generator = datagen.flow_from_directory(
     'leafsnap/images/train_r',
-    target_size=(244, 244),
+    target_size=(299, 299),
     batch_size=BATCH_SIZE,
-    color_mode='grayscale',
-    class_mode='categorical',
-    save_to_dir='prev',
-    save_format='jpeg')
+    # color_mode='grayscale',
+    class_mode='categorical')
 
 vdatagen = ImageDataGenerator(
     rotation_range=0,
     width_shift_range=0,
     height_shift_range=0,
-    preprocessing_function=preprocess_input_vgg,
-    # rescale=1. / 255,
+    # preprocessing_function=preprocess_input_vgg,
+    rescale=1. / 255,
     horizontal_flip=False,
     vertical_flip=False,
     shear_range=0,
@@ -87,20 +85,26 @@ vdatagen = ImageDataGenerator(
 
 validator = vdatagen.flow_from_directory(
     'leafsnap/images/test_r',
-    target_size=(244, 244),
+    target_size=(299, 299),
     batch_size=BATCH_SIZE,
-    color_mode='grayscale',
+    # color_mode='grayscale',
     class_mode='categorical')
 
 
-model = applications.VGG16(weights='imagenet', include_top=False)
-model.add(Flatten(input_shape=model.output_shape[1:]))
-model.add(Dense(1024, activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(184, activation='softmax'))
+# model = applications.VGG16(weights='imagenet', include_top=False)
 
-for layer in model.layers[:25]:
-    layer.trainable = False
+# x = model.output
+# x = GlobalAveragePooling2D()(x)
+# x = Dense(1024, activation='relu')(x)
+# x = Dropout(0.5)(x)
+# predictions = Dense(184, activation='softmax')(x)
+
+# model = Model(inputs=model.inputs, outputs=predictions)
+
+# for layer in model.layers[:25]:
+#     layer.trainable = False
+
+model = applications.inception_v3.InceptionV3(weights=None, classes=184)
 
 model.compile(loss='categorical_crossentropy',
               optimizer='adam',
