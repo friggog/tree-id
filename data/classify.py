@@ -90,7 +90,7 @@ def top_k_scores(classes, predicted, labels, k):
     return GTP / (GTP + GFN)
 
 
-def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
+def classify(dataset, test, limit=-1, reduce=0, gamma=1, C=1000, save=False, cv=True):
     print('** CLASSIFYING **')
     print('** ' + dataset.upper() + ' **')
     print('-> loading data')
@@ -106,26 +106,26 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, save=False, cv=True):
         print('Reduced to', reduce)
     if cv:
         print('-> cross-validating')
-        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced')
+        clf = SVC(kernel='rbf', C=C, gamma=gamma, class_weight='balanced')
         t = time.time()
         cv_eval(clf, train_f, train_l)
         print('Fitted in', (time.time() - t))
     if test:
         print('-> testing')
-        clf = SVC(kernel='rbf', C=1000, gamma=gamma, class_weight='balanced', probability=True)
+        clf = SVC(kernel='rbf', C=C, gamma=gamma, class_weight='balanced', probability=True)
         t = time.time()
         clf.fit(train_f, train_l)
         print('Fitted in', (time.time() - t))
         if save:
             joblib.dump(clf, 'SVM.lzma', compress=9)
         predicted = clf.predict(test_f)
-        # predicted_p = clf.predict_proba(test_f)
-        # rs = []
-        # for r in range(10):
-        #     rk = top_k_scores(clf.classes_, predicted_p, test_l, r + 1)
-        #     rs.append((r +1, rk))
-        # for r, rk in rs:
-        #     print('(' +str(r) +', ' +str(rk) +') ', end='')
+        predicted_p = clf.predict_proba(test_f)
+        rs = []
+        for r in range(10):
+            rk = top_k_scores(clf.classes_, predicted_p, test_l, r + 1)
+            rs.append((r +1, rk))
+        for r, rk in rs:
+            print('(' +str(r) +', ' +str(rk) +') ', end='')
         print('')
         print('REC', recall_score(test_l, predicted, average='macro'))
         print('PRE', precision_score(test_l, predicted, average='macro'))
@@ -150,5 +150,5 @@ if __name__ == '__main__':
         print('classify.py dataset test? [extract? use_cmaps?]')
         exit()
     if sys.argv[3].lower() == 'true':
-        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'), cmap=sys.argv[4].lower() == 'true', limit=10)
-    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=128, gamma=4, cv=(not (sys.argv[2].lower() == 'true')))
+        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'), cmap=sys.argv[4].lower() == 'true', limit=-1)
+    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=128, gamma=7, C=1000, cv=(not (sys.argv[2].lower() == 'true')))

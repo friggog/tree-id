@@ -33,9 +33,23 @@ def get_curvature_map(line, segment, scale=0.1, length=128):
         res = cv2.bitwise_and(mask, segment)
         o = np.sum(res) / a
         curv.append(o)
+        # show = np.zeros((segment.shape[0], segment.shape[1], 3))
+        # show[:, :, 0] += segment
+        # show[:, :, 1] += segment
+        # show[:, :, 2] += segment
+        # show[:, :, 2] += mask
+        # show[:, :, 2] -= res
+        # show[:, :, 2] -= res
+        # show[:, :, 0] -= res
+        # cv2.imshow('o', show)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
     c = np.array(curv, np.uint8)
     if len(c) != length:
         c = cv2.resize(c, (1, length)).reshape(length)
+    # for i, a in enumerate(c):
+        # print('('+str(i)+','+str(a)+') ', end='')
+    # print('')
     # plt.plot(c)
     # plt.acorr(c - np.mean(c), maxlags=32)
     # plt.show()
@@ -197,6 +211,8 @@ def f_fft(cnt):
     # out.append(np.mean(x))
     # out.append(np.std(x))
     out.append(c)
+    # plt.bar(range(len(x)), x.tolist())
+    # plt.show()
     return out
 
 # EXTRACTION #
@@ -363,7 +379,7 @@ def isolate_swedish_leaf(path):
             curr = (cnt, a, l)
     if curr[0] is None:
         return None, None, None, None, None
-    return grey, curr[0], curr[1], curr[2], thresh_raw
+    return grey, curr[0], curr[1], curr[2], thresh_raw  # TODO try this without raw
 
 
 def isolate_flavia_leaf(path):
@@ -439,7 +455,7 @@ def get_features(dataset, path, use_cmap=False):
         isolate_leaf= isolate_shapecn_leaf
     elif dataset == 'swedish':
         isolate_leaf = isolate_swedish_leaf
-    elif dataset == 'leafsnap-l':
+    elif dataset == 'leafsnap-l' or dataset == 'figure':
         isolate_leaf = functools.partial(isolate_leafsnap_leaf, 'lab')
     elif dataset == 'leafsnap-f':
         isolate_leaf = functools.partial(isolate_leafsnap_leaf, 'field')
@@ -509,7 +525,7 @@ def main(argv):
     if len(argv) == 1:
         extract(argv[0])
     elif len(argv) == 2:
-        extract(argv[0], argv[1], show=True)  # , use_cmap=True, show=True)
+        extract(argv[0], argv[1])  # , use_cmap=True, show=True)
     else:
         if len(argv) == 6:
             cmap = argv[5].lower() == 'true'
