@@ -267,4 +267,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # TODO CLI
     main(sys.argv[1:])

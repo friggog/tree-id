@@ -13,7 +13,7 @@ from sklearn.model_selection import cross_validate
 from sklearn.svm import SVC
 from sklearn.externals import joblib
 from sklearn.decomposition import PCA
-from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
+from sklearn.metrics import recall_score, precision_score, f1_score
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -130,22 +130,26 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, C=1000, save=False, cv=
         print('REC', recall_score(test_l, predicted, average='macro'))
         print('PRE', precision_score(test_l, predicted, average='macro'))
         print('F1S', f1_score(test_l, predicted, average='macro'))
-        # print(confusion_matrix(predicted, test_l))
 
 
 def extract(dataset, test=False, cmap=False, limit=-1):
+    def run(t):
+        p1 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '0', str(cmap)])
+        p2 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '1', str(cmap)])
+        p3 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '2', str(cmap)])
+        p4 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '3', str(cmap)])
+        p1.wait()
+        p2.wait()
+        p3.wait()
+        p4.wait()
     print('** EXTRACTING **')
-    p1 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '0', str(cmap)])
-    p2 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '1', str(cmap)])
-    p3 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '2', str(cmap)])
-    p4 = subprocess.Popen(['python3', 'extract.py', dataset, str(test), str(limit), '4', '3', str(cmap)])
-    p1.wait()
-    p2.wait()
-    p3.wait()
-    p4.wait()
+    if test:
+        run('test')
+    run('train')
 
 
 if __name__ == '__main__':
+    # TODO good CLI
     if len(sys.argv) == 1:
         print('classify.py dataset test? [extract? use_cmaps?]')
         exit()

@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /usr/bin/env python
 
 import glob
 import os
@@ -7,7 +7,7 @@ from math import floor, sqrt
 import functools
 import cv2
 import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -22,7 +22,7 @@ def square_kernel(rad):
     return np.ones((rad, rad), np.uint8)
 
 
-def get_curvature_map(line, segment, scale=0.1, length=128):
+def get_curvature_map(line, segment, scale=0.1, length=128, figure=False, plot=False):
     curv = []
     r = max(int(len(line) * scale), 2)
     a = np.pi * pow(r, 2)
@@ -33,29 +33,27 @@ def get_curvature_map(line, segment, scale=0.1, length=128):
         res = cv2.bitwise_and(mask, segment)
         o = np.sum(res) / a
         curv.append(o)
-        # show = np.zeros((segment.shape[0], segment.shape[1], 3))
-        # show[:, :, 0] += segment
-        # show[:, :, 1] += segment
-        # show[:, :, 2] += segment
-        # show[:, :, 2] += mask
-        # show[:, :, 2] -= res
-        # show[:, :, 2] -= res
-        # show[:, :, 0] -= res
-        # cv2.imshow('o', show)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        if figure:
+            show = np.zeros((segment.shape[0], segment.shape[1], 3))
+            show[:, :, 0] += segment
+            show[:, :, 1] += segment
+            show[:, :, 2] += segment
+            show[:, :, 2] += mask
+            show[:, :, 2] -= res
+            show[:, :, 2] -= res
+            show[:, :, 0] -= res
+            cv2.imshow('o', show)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
     c = np.array(curv, np.uint8)
     if len(c) != length:
         c = cv2.resize(c, (1, length)).reshape(length)
-    # for i, a in enumerate(c):
-        # print('('+str(i)+','+str(a)+') ', end='')
-    # print('')
-    # plt.plot(c)
-    # plt.acorr(c - np.mean(c), maxlags=32)
-    # plt.show()
-    # cv2.imshow('o', segment)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    if plot:
+        for i, a in enumerate(c):
+            print('(' + str(i) + ',' +str(a) + ') ', end='')
+        print('')
+        plt.plot(c)
+        plt.show()
     return c
 
 
@@ -70,14 +68,6 @@ def write_curvature_image(path, curve, segment):
 # FEATURES #
 
 
-def autocorr(x):
-    x -= np.mean(x)
-    c = np.correlate(x, x, mode=2)
-    c /= np.sqrt(np.dot(x, x) * np.dot(x, x))
-    c = c[len(x):]
-    return c
-
-
 def entropy(seq, w=1):
     seq = seq / np.sum(seq)
     entropy = 0
@@ -85,20 +75,6 @@ def entropy(seq, w=1):
         entropy -= q * np.nan_to_num(np.log2(q))
     entropy += np.log(w)
     return entropy
-
-
-def LBP(seq, p):
-    o = []
-    for i in range(len(seq) - p):
-        x = 0
-        c = i + p // 2
-        for k in range(p):
-            x += (seq[i + k] - seq[c]) * 2**k
-        o.append(x)
-    # plt.plot(seq)
-    # plt.plot(range(p // 2, len(seq) - p//2), o / np.max(o))
-    # plt.show()
-    return o / np.max(o)
 
 
 def f_curvature_stat(curvature_map):
@@ -141,31 +117,6 @@ def f_curvature_stat(curvature_map):
     # CURVE AREA
     ac = np.abs(curvature_map - np.mean(curvature_map))
     out.append(np.mean(ac))
-
-    # AUTOCORRELATION
-    # acorr = autocorr(curvature_map)
-    # plt.plot(curvature_map)
-    # plt.show()
-    # print(np.mean(curvature_map))
-    # out.extend(acorr[0::4])
-
-    # ZERO CROSSING
-    # zcr = 0
-    # mean = np.mean(curvature_map)
-    # for i in range(1, len(curvature_map)):
-    #     zcr += (curvature_map[i] - mean) * (curvature_map[i - 1] - mean) < 0
-    # zcr /= len(curvature_map)
-    # out.append(zcr)
-
-    # LBP
-    # lbp = LBP(curvature_map, 8)
-    # b = 16
-    # lbp_hist = np.histogram(lbp, bins=b, range=(-1, 1))[0]
-    # e = entropy(lbp_hist, 2 / b)
-    # out.append(e / 12)
-
-    # fd = np.diff(lbp, n=1)
-    # out.append(np.mean(fd))
 
     return out
 
@@ -211,8 +162,6 @@ def f_fft(cnt):
     # out.append(np.mean(x))
     # out.append(np.std(x))
     out.append(c)
-    # plt.bar(range(len(x)), x.tolist())
-    # plt.show()
     return out
 
 # EXTRACTION #
@@ -329,15 +278,7 @@ def isolate_leafsnap_leaf(t, path):
         _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         curr = get_largest_contour(contours, h, w)
     if curr[0] is None:
-        print('SKIPPED', path)
         return None, None, None, None, None
-    ##
-    # image = cv2.drawContours(image, [curr[0]], -1, (0, 0, 255))
-    # cv2.imshow('a', image)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    # return None, None, None, None, None
-    ##
     return grey, curr[0], curr[1], curr[2], thresh
 
 
@@ -379,7 +320,7 @@ def isolate_swedish_leaf(path):
             curr = (cnt, a, l)
     if curr[0] is None:
         return None, None, None, None, None
-    return grey, curr[0], curr[1], curr[2], thresh_raw  # TODO try this without raw
+    return grey, curr[0], curr[1], curr[2], thresh_raw
 
 
 def isolate_flavia_leaf(path):
@@ -493,11 +434,6 @@ def get_features(dataset, path, use_cmap=False):
 
 
 def extract(dataset, t, limit=-1, step=1, base=0, show=False, use_cmap=False):
-    if t == 'True':
-        extract(dataset, 'train', limit=limit, step=step, base=base, show=show, use_cmap=use_cmap)
-        t = 'test'
-    elif t == 'False':
-        t = 'train'
     count = 0
     skipped = 0
     for species_path in sorted(glob.glob(dataset + '/images/' + t + '/*')):
@@ -507,8 +443,6 @@ def extract(dataset, t, limit=-1, step=1, base=0, show=False, use_cmap=False):
         for i, image_path in enumerate(sorted(glob.glob(species_path + '/*'))):
             if step == 1 or (step > 1 and (i - base) % step == 0):
                 f_path = new_path + '/' + '_'.join(image_path.split('/')[-1].split('.')[:-1])
-                # if os.path.exists(f_path + '.npy'):
-                #     continue
                 features = get_features(dataset, image_path, use_cmap)
                 if features is not None:
                     np.save(f_path, features)
@@ -522,16 +456,41 @@ def extract(dataset, t, limit=-1, step=1, base=0, show=False, use_cmap=False):
 
 
 def main(argv):
-    if len(argv) == 1:
-        extract(argv[0])
-    elif len(argv) == 2:
-        extract(argv[0], argv[1])  # , use_cmap=True, show=True)
+    if len(argv) > 0:
+        lim = -1
+        step = 1
+        base = 0
+        if '-l' in sys.argv:
+            lim = int(sys.argv[sys.argv.index('-l') + 1])
+        if '-s' in sys.argv or '-b' in sys.argv:
+            if not ('-s' in sys.argv and '-b' in sys.argv):
+                raise Exception('both step and base required')
+            step = int(sys.argv[sys.argv.index('-s') + 1])
+            base = int(sys.argv[sys.argv.index('-b') + 1])
+        extract(argv[0],
+                argv[1],
+                use_cmap=('-cm' in sys.argv),
+                limit=lim,
+                step=step,
+                base=base)
     else:
-        if len(argv) == 6:
-            cmap = argv[5].lower() == 'true'
-        else:
-            cmap = False
-        extract(argv[0], argv[1], limit=int(argv[2]), step=int(argv[3]), base=int(argv[4]), use_cmap=cmap)
+        print('Basic usage:')
+        print('extract.py dataset_name subset_name [-cm]')
+        print()
+        print('dataset_name must be one of foliage, leaves, shapecn, swedish, leafsnap-l, leafsnap-f, flavia, folio')
+        print('datasets should be located in the same directoy in folder named as above')
+        print('inside each folder should be a folder called images, inside this a number of folders, one for each subset')
+        print('inside these there should be a folder for each class which contains the appropriate images')
+        print('subsets are usually "train" and "test" for example, the leaves folder has an example layout')
+        print('curvature maps are cached when features are extracted, cached versions can be used with the -cm option')
+        print()
+        print('Advanced usage:')
+        print('extract.py dataset_name subset_name [-cm] [-l k] [-s n -b m]')
+        print('-l k limits the number of images per class for which features are extracted to n')
+        print('For splitting the task across multiple processes -s and -b can be used')
+        print('-s n defines the step i.e. the number of processes being used as n')
+        print('-b m defines the base for this process as m i.e. which of the n processes it is')
+        print()
 
 
 if __name__ == "__main__":
