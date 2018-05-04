@@ -455,43 +455,46 @@ def extract(dataset, t, limit=-1, step=1, base=0, show=False, use_cmap=False):
     print('Done ' + t + ':', str(count).rjust(6), '(' + str(skipped) + ')')
 
 
-def main(argv):
-    if len(argv) > 0:
-        lim = -1
-        step = 1
-        base = 0
-        if '-l' in sys.argv:
-            lim = int(sys.argv[sys.argv.index('-l') + 1])
-        if '-s' in sys.argv or '-b' in sys.argv:
-            if not ('-s' in sys.argv and '-b' in sys.argv):
-                raise Exception('both step and base required')
-            step = int(sys.argv[sys.argv.index('-s') + 1])
-            base = int(sys.argv[sys.argv.index('-b') + 1])
-        extract(argv[0],
-                argv[1],
-                use_cmap=('-cm' in sys.argv),
-                limit=lim,
-                step=step,
-                base=base)
-    else:
-        print('Basic usage:')
-        print('extract.py dataset_name subset_name [-cm]')
-        print()
-        print('dataset_name must be one of foliage, leaves, shapecn, swedish, leafsnap-l, leafsnap-f, flavia, folio')
-        print('datasets should be located in the same directoy in folder named as above')
-        print('inside each folder should be a folder called images, inside this a number of folders, one for each subset')
-        print('inside these there should be a folder for each class which contains the appropriate images')
-        print('subsets are usually "train" and "test" for example, the leaves folder has an example layout')
-        print('curvature maps are cached when features are extracted, cached versions can be used with the -cm option')
-        print()
-        print('Advanced usage:')
-        print('extract.py dataset_name subset_name [-cm] [-l k] [-s n -b m]')
-        print('-l k limits the number of images per class for which features are extracted to n')
-        print('For splitting the task across multiple processes -s and -b can be used')
-        print('-s n defines the step i.e. the number of processes being used as n')
-        print('-b m defines the base for this process as m i.e. which of the n processes it is')
-        print()
+def help():
+    print('Basic usage:')
+    print('extract.py dataset_name subset_name [-cm]')
+    print()
+    print('dataset_name must be one of foliage, leaves, shapecn, swedish, leafsnap-l, leafsnap-f, flavia, folio')
+    print('datasets should be located in the same directoy in folder named as above')
+    print('inside each folder should be a folder called images, inside this a number of folders, one for each subset')
+    print('inside these there should be a folder for each class which contains the appropriate images')
+    print('subsets are usually "train" and "test" for example, the leaves folder has an example layout')
+    print('curvature maps are cached when features are extracted, cached versions can be used with the -cm option')
+    print()
+    print('Advanced usage:')
+    print('extract.py dataset_name subset_name [-cm] [-l k] [-s n -b m]')
+    print('-l k limits the number of images per class for which features are extracted to n')
+    print('For splitting the task across multiple processes -s and -b can be used')
+    print('-s n defines the step i.e. the number of processes being used as n')
+    print('-b m defines the base for this process as m i.e. which of the n processes it is')
+    print()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '-h' or sys.argv[1] == '--help':
+            help()
+        else:
+            lim = -1
+            step = 1
+            base = 0
+            if '-l' in sys.argv:
+                lim = int(sys.argv[sys.argv.index('-l') + 1])
+            if '-s' in sys.argv or '-b' in sys.argv:
+                if not ('-s' in sys.argv and '-b' in sys.argv):
+                    raise Exception('both step and base required')
+                step = int(sys.argv[sys.argv.index('-s') + 1])
+                base = int(sys.argv[sys.argv.index('-b') + 1])
+            extract(sys.argv[1],
+                    sys.argv[2],
+                    use_cmap=('-cm' in sys.argv),
+                    limit=lim,
+                    step=step,
+                    base=base)
+    else:
+        help()

@@ -1,4 +1,4 @@
-#! /usr/local/bin/python3
+#! /usr/bin/env python
 
 import glob
 import subprocess
@@ -148,11 +148,31 @@ def extract(dataset, test=False, cmap=False, limit=-1):
     run('train')
 
 
+def help():
+    print('Usage:')
+    print('./classify.py dataset [-test] [-ex] [-cm] [-l n]')
+    print()
+    print('-test to test the classifier (default is to cross-validate on the training set)')
+    print('-ex to extract the features and then classify (split across 4 processes)')
+    print('-cm to extract features from cached curvature maps')
+    print('-l n to limit the number of features loaded/extracted to n')
+    print()
+
+
 if __name__ == '__main__':
-    # TODO good CLI
-    if len(sys.argv) == 1:
-        print('classify.py dataset test? [extract? use_cmaps?]')
-        exit()
-    if sys.argv[3].lower() == 'true':
-        extract(sys.argv[1], test=(sys.argv[2].lower() == 'true'), cmap=sys.argv[4].lower() == 'true', limit=-1)
-    classify(sys.argv[1], test=(sys.argv[2].lower() == 'true'), limit=-1, reduce=128, gamma=7, C=1000, cv=(not (sys.argv[2].lower() == 'true')))
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '-h' or sys.argv[1] == '--help':
+            help()
+        else:
+            dataset = sys.argv[1]
+            test = '-test' in sys.argv
+            cmaps = '-cm' in sys.argv
+            lim = -1
+            if '-l' in sys.argv:
+                lim = int(sys.argv[sys.argv.index('-l') + 1])
+            if '-ex' in sys.argv:
+                extract(dataset, test=test, cmap=cmaps, limit=lim)
+            # reduce=128, gamma=7, C=1000 are the parameters used in the paper, but can of course be altered
+            classify(dataset, test=test, limit=lim, reduce=128, gamma=7, C=1000, cv=(not test))
+    else:
+        help()
