@@ -450,7 +450,7 @@ def extract(dataset, t, limit=-1, step=1, base=0, show=False, use_cmap=False):
                     skipped += 1
                 count += 1
                 print('Done ' + t + ':', str(count).rjust(6), '(' + str(skipped) + ')', end='\r')
-            if (show and i > 3) or (limit > 0 and i >= limit):
+            if (show and i > 3) or (limit > 0 and i >= limit - 1):
                 break
     print('Done ' + t + ':', str(count).rjust(6), '(' + str(skipped) + ')')
 

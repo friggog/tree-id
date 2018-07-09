@@ -95,7 +95,7 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, C=1000, save=False, cv=
     print('** ' + dataset.upper() + ' **')
     print('-> loading data')
     train_f, train_l, test_f, test_l = load_features(dataset, test, limit)
-    if reduce > 0:
+    if reduce > 0 and len(train_f[0]) > reduce:
         print('-> reducing dimensionality')
         reduction = PCA(n_components=reduce)
         if save:
@@ -134,10 +134,10 @@ def classify(dataset, test, limit=-1, reduce=0, gamma=1, C=1000, save=False, cv=
 
 def extract(dataset, test=False, cmap=False, limit=-1):
     def run(t):
-        p1 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '0', str(cmap)])
-        p2 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '1', str(cmap)])
-        p3 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '2', str(cmap)])
-        p4 = subprocess.Popen(['python3', 'extract.py', dataset, t, str(limit), '4', '3', str(cmap)])
+        p1 = subprocess.Popen(['python3', 'extract.py', dataset, t, '-l', str(limit), '-s', '4', '-b', '0', '-cm' if cmap else ''])
+        p2 = subprocess.Popen(['python3', 'extract.py', dataset, t, '-l', str(limit), '-s', '4', '-b', '1', '-cm' if cmap else ''])
+        p3 = subprocess.Popen(['python3', 'extract.py', dataset, t, '-l', str(limit), '-s', '4', '-b', '2', '-cm' if cmap else ''])
+        p4 = subprocess.Popen(['python3', 'extract.py', dataset, t, '-l', str(limit), '-s', '4', '-b', '3', '-cm' if cmap else ''])
         p1.wait()
         p2.wait()
         p3.wait()
@@ -156,6 +156,7 @@ def help():
     print('-ex to extract the features and then classify (split across 4 processes)')
     print('-cm to extract features from cached curvature maps')
     print('-l n to limit the number of features loaded/extracted to n')
+    print('-s to save models')
     print()
 
 
@@ -173,6 +174,6 @@ if __name__ == '__main__':
             if '-ex' in sys.argv:
                 extract(dataset, test=test, cmap=cmaps, limit=lim)
             # reduce=128, gamma=7, C=1000 are the parameters used in the paper, but can of course be altered
-            classify(dataset, test=test, limit=lim, reduce=128, gamma=7, C=1000, cv=(not test))
+            classify(dataset, test=test, limit=lim, reduce=128, gamma=7, C=1000, cv=(not test), save='-s' in sys.argv)
     else:
         help()
