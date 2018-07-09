@@ -1,5 +1,5 @@
 # tree-id
-Code for the paper 'TODO'.
+Code for the paper '[TODO](http://todo.paper.url)'.
 
 Achieves comparable results to state-of-the-art methods, though uses only shape features extracted from the curvature map of the leaf (no colour or texture features).
 
