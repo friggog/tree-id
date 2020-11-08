@@ -347,8 +347,12 @@ def isolate_flavia_leaf(path):
 def isolate_leaves_leaf(path):
     grey = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     _, thresh = cv2.threshold(grey, 240, 255, cv2.THRESH_BINARY)
-    if 'fish' not in path:
+    if 'fish' not in path and 'mpeg' not in path and 'animals' not in path:
         thresh = cv2.subtract(thresh, cv2.morphologyEx(thresh, cv2.MORPH_TOPHAT, square_kernel(11)))
+    else:
+        h, w = grey.shape[:2]
+        s = 640 / max(h, w)
+        grey = cv2.resize(grey, (int(s * w), int(s * h)))
     _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     curr = (None, 0, 0)
     for cnt in contours:
@@ -390,7 +394,7 @@ def isolate_shapecn_leaf(path):
 def get_features(dataset, path, use_cmap=False):
     if dataset == 'foliage':
         isolate_leaf = isolate_foliage_leaf
-    elif dataset in ['leaves', 'leafsnap-s', 'fish', 'mpeg']:
+    elif dataset in ['leaves', 'leafsnap-s', 'fish', 'mpeg', 'animals']:
         isolate_leaf = isolate_leaves_leaf
     elif 'shapecn' in dataset:
         isolate_leaf= isolate_shapecn_leaf
